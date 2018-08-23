@@ -21,26 +21,11 @@ namespace UnityEditor.Experimental.AutoLOD
         private const string k_UpdateSceneLODMenuPath = "AutoLOD/Update SceneLOD";
         private const string k_ShowVolumeBoundsMenuPath = "AutoLOD/Show Volume Bounds";
 
-        public int coroutineQueueRemaining { get { return m_CoroutineQueue.Count; }}
-        public long coroutineCurrentExecutionTime { get { return m_ServiceCoroutineExecutionTime.ElapsedMilliseconds; }}
-
         static bool s_HLODEnabled = true;
         static bool s_Activated;
         
-        string m_CreateRootVolumeForScene = "Default"; // Set to some value, so new scenes don't auto-create
         LODVolume m_RootVolume;
-        Queue<IEnumerator> m_CoroutineQueue = new Queue<IEnumerator>();
-        Coroutine m_ServiceCoroutineQueue;
-        bool m_SceneDirty;
         Stopwatch m_ServiceCoroutineExecutionTime = new Stopwatch();
-        Camera m_LastCamera;
-        HashSet<Renderer> m_ExcludedRenderers = new HashSet<Renderer>();
-
-        // Local method variable caching
-        List<Renderer> m_FoundRenderers = new List<Renderer>();
-        HashSet<Renderer> m_ExistingRenderers = new HashSet<Renderer>();
-        HashSet<Renderer> m_AddedRenderers = new HashSet<Renderer>();
-        HashSet<Renderer> m_RemovedRenderers = new HashSet<Renderer>();
 
         void OnEnable()
         {
@@ -64,9 +49,10 @@ namespace UnityEditor.Experimental.AutoLOD
 
             if (s_Activated)
                 AddCallbacks();
-
-            m_ServiceCoroutineQueue = null;
 #endif
+
+            MonoBehaviourHelper.StartCoroutine(SetRootLODVolume());
+
             if (m_RootVolume != null)
                 m_RootVolume.ResetLODGroup();
 
@@ -110,7 +96,6 @@ namespace UnityEditor.Experimental.AutoLOD
             if (m_RootVolume && GUILayout.Button(s_HLODEnabled ? "Disable HLOD" : "Enable HLOD"))
             {
                 s_HLODEnabled = !s_HLODEnabled;
-                m_LastCamera = null;
 
                 if ( m_RootVolume != null )
                     m_RootVolume.ResetLODGroup();
@@ -126,112 +111,41 @@ namespace UnityEditor.Experimental.AutoLOD
         {
             if (!m_RootVolume)
             {
-                yield return SetRootLODVolume();
+                //yield return SetRootLODVolume();
 
                 if (!m_RootVolume)
                 {
-                    if (m_CreateRootVolumeForScene == SceneManager.GetActiveScene().name)
-                    {
-                        Dbg.Log("Creating root volume");
-                        m_RootVolume = LODVolume.Create();
-                    }
-                    else
-                    {
-                        yield break;
-                    }
+
+                    Dbg.Log("Creating root volume");
+                    m_RootVolume = LODVolume.Create();
+
                 }
             }
 
-            var renderers = m_FoundRenderers;
-            renderers.Clear();
+            List<LODGroup> lodGroups = new List<LODGroup>();
+            yield return ObjectUtils.FindObjectsOfType(lodGroups);
 
-            yield return ObjectUtils.FindObjectsOfType(renderers);
+            int hlodLayerMask = LayerMask.NameToLayer(LODVolume.HLODLayer);
 
-            // Remove any renderers that should not be there (e.g. HLODs)
-            renderers.RemoveAll(r => m_ExcludedRenderers.Contains(r));
-            renderers.RemoveAll(r =>
+            // Remove any lodgroups that should not be there (e.g. HLODs)
+            lodGroups.RemoveAll(r =>
             {
                 if (r)
                 {
-                    // Check against previous collection
-                    if (m_ExistingRenderers.Contains(r))
-                        return false;
-
-                    if (r.gameObject.layer == LayerMask.NameToLayer(LODVolume.HLODLayer))
-                    {
-                        m_ExcludedRenderers.Add(r);
+                    if (r.gameObject.layer == hlodLayerMask)
                         return true;
-                    }
 
-                    var mf = r.GetComponent<MeshFilter>();
-                    if (!mf || (mf.sharedMesh && mf.sharedMesh.GetTopology(0) != MeshTopology.Triangles))
-                    {
-                        m_ExcludedRenderers.Add(r);
+                    LOD lastLod = r.GetLODs().Last();
+
+                    if (lastLod.renderers.Length == 0)
                         return true;
-                    }
-
-                    var lodGroup = r.GetComponentInParent<LODGroup>();
-                    if (lodGroup)
-                    {
-                        var lods = lodGroup.GetLODs();
-
-                        // Skip LOD0, so that we keep the original renderers in the list
-                        for (int i = 1; i < lods.Length; i++)
-                        {
-                            if (lods[i].renderers.Contains(r))
-                            {
-                                m_ExcludedRenderers.Add(r);
-                                return true;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        // HLODs should come after traditional LODs, so exclude any standalone renderers
-                        m_ExcludedRenderers.Add(r);
-                        return true;
-                    }
                 }
 
                 return false;
             });
 
-            var existingRenderers = m_ExistingRenderers;
-            existingRenderers.Clear();
-            existingRenderers.UnionWith(m_RootVolume.renderers);
 
-            var removed = m_RemovedRenderers;
-            removed.Clear();
-            removed.UnionWith(m_ExistingRenderers);
-            removed.ExceptWith(renderers);
-
-            var added = m_AddedRenderers;
-            added.Clear();
-            added.UnionWith(renderers);
-            added.ExceptWith(existingRenderers);
-
-            foreach (var r in removed)
-            {
-                if (existingRenderers.Contains(r))
-                {
-                    yield return m_RootVolume.RemoveRenderer(r);
-
-                    // Check if the BVH shrunk
-                    yield return SetRootLODVolume();
-                }
-            }
-
-            foreach (var r in added)
-            {
-                if (!existingRenderers.Contains(r))
-                {
-                    yield return m_RootVolume.AddRenderer(r);
-                    r.transform.hasChanged = false;
-
-                    // Check if the BVH grew
-                    yield return SetRootLODVolume();
-                }
-            }
+            yield return m_RootVolume.SetLODGruops(lodGroups);
         }
 
         IEnumerator SetRootLODVolume()
@@ -266,33 +180,23 @@ namespace UnityEditor.Experimental.AutoLOD
             
             if (lodVolume)
                 m_RootVolume = lodVolume;
-
-            m_ExcludedRenderers.Clear();
         }
 
         void EditorUpdate()
         {
-            if ((m_CoroutineQueue.Count > 0 || m_SceneDirty || (m_RootVolume && m_RootVolume.dirty)) && m_ServiceCoroutineQueue == null)
-                m_ServiceCoroutineQueue = MonoBehaviourHelper.StartCoroutine(ServiceCoroutineQueue());
+            if (m_RootVolume == null)
+            {
+                MonoBehaviourHelper.StartCoroutine(SetRootLODVolume());
+            }
         }
 
         IEnumerator ServiceCoroutineQueue()
         {
             m_ServiceCoroutineExecutionTime.Start();
 
-            if (m_SceneDirty)
-            {
-                m_CoroutineQueue.Enqueue(UpdateOctree());
-                m_SceneDirty = false;
-            }
-
-            if (m_RootVolume && m_RootVolume.dirty)
-                m_CoroutineQueue.Enqueue(m_RootVolume.UpdateHLODs());
-
-            while (m_CoroutineQueue.Count > 0)
-                yield return MonoBehaviourHelper.StartCoroutine(m_CoroutineQueue.Dequeue());
-
-            m_ServiceCoroutineQueue = null;
+            yield return UpdateOctree();
+            yield return m_RootVolume.UpdateHLODs();
+            
             m_ServiceCoroutineExecutionTime.Reset();
         }
 
@@ -328,9 +232,7 @@ namespace UnityEditor.Experimental.AutoLOD
         [MenuItem(k_GenerateSceneLODMenuPath, priority = 1)]
         static void GenerateSceneLOD(MenuCommand menuCommand)
         {
-            instance.m_CreateRootVolumeForScene = SceneManager.GetActiveScene().name;
-            instance.m_SceneDirty = true;
-            instance.m_LastCamera = null;
+            MonoBehaviourHelper.StartCoroutine(instance.ServiceCoroutineQueue());            
         }
 
 
@@ -343,10 +245,14 @@ namespace UnityEditor.Experimental.AutoLOD
         [MenuItem(k_DestroySceneLODMenuPath, priority = 1)]
         static void DestroySceneLOD(MenuCommand menuCommand)
         {
+            
+            if (instance.m_RootVolume != null)
+                instance.m_RootVolume.ResetLODGroup();
+
             MonoBehaviourHelper.StartCoroutine(ObjectUtils.FindGameObject("HLODs",
                 root => { DestroyImmediate(root); }));
             DestroyImmediate(instance.m_RootVolume.gameObject);
-            instance.m_SceneDirty = false;
+
         }
 
         [MenuItem(k_UpdateSceneLODMenuPath, true, priority = 1)]
