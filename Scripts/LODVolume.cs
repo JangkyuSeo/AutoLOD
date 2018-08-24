@@ -587,7 +587,8 @@ public class LODVolume : MonoBehaviour
         {
             foreach (var group in m_LodGroups)
             {
-                group.SetEnabled(true);
+                if ( group != null )
+                    group.SetEnabled(true);
             }
         }
         
