@@ -127,6 +127,9 @@ namespace UnityEditor.Experimental.AutoLOD
             ModelImporterLODGenerator.maxLOD = maxLOD;
             ModelImporterLODGenerator.enabled = generateOnImport;
             ModelImporterLODGenerator.initialLODMaxPolyCount = initialLODMaxPolyCount;
+
+            if (!SceneLOD.instance)
+                Debug.Log("SceneLOD failed to start");
 #else
             ModelImporterLODGenerator.enabled = false;
 #endif

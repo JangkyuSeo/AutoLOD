@@ -27,6 +27,10 @@ namespace UnityEditor.Experimental.AutoLOD
         LODVolume m_RootVolume;
         Stopwatch m_ServiceCoroutineExecutionTime = new Stopwatch();
 
+        void Start()
+        {
+            Dbg.Log("SceneLOD start");
+        }
         void OnEnable()
         {
 #if UNITY_2017_3_OR_NEWER
@@ -50,17 +54,13 @@ namespace UnityEditor.Experimental.AutoLOD
             if (s_Activated)
                 AddCallbacks();
 #endif
-
-            MonoBehaviourHelper.StartCoroutine(SetRootLODVolume());
-
-            if (m_RootVolume != null)
-                m_RootVolume.ResetLODGroup();
-
+            Dbg.Log("SceneLOD enable");
             Menu.SetChecked(k_ShowVolumeBoundsMenuPath, Settings.ShowVolumeBounds);
         }
 
         void OnDisable()
         {
+            Dbg.Log("SceneLOD disable");
             s_Activated = false;
             RemoveCallbacks();
 
@@ -111,7 +111,7 @@ namespace UnityEditor.Experimental.AutoLOD
         {
             if (!m_RootVolume)
             {
-                //yield return SetRootLODVolume();
+                yield return SetRootLODVolume();
 
                 if (!m_RootVolume)
                 {
@@ -177,9 +177,12 @@ namespace UnityEditor.Experimental.AutoLOD
 
                 yield return null;
             }
-            
+
             if (lodVolume)
+            {
                 m_RootVolume = lodVolume;
+                m_RootVolume.ResetLODGroup();
+            }
         }
 
         void EditorUpdate()

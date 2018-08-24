@@ -554,6 +554,10 @@ public class LODVolume : MonoBehaviour
     //UpdateLODGroup will be makes currect.
     public void ResetLODGroup()
     {
+        if (transform.parent == null)
+        {
+            Debug.Log("Reset volume.");
+        }
         if (m_LodGroup == null)
         {
             m_LodGroup = GetComponent<LODGroup>();
