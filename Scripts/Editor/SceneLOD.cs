@@ -274,7 +274,6 @@ namespace UnityEditor.Experimental.AutoLOD
             bool showVolume = !Settings.ShowVolumeBounds;
             Menu.SetChecked(k_ShowVolumeBoundsMenuPath, showVolume);
 
-            LODVolume.drawBounds = showVolume;
             Settings.ShowVolumeBounds = showVolume;
 
             // Force more frequent updating

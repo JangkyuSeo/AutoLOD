@@ -17,7 +17,6 @@ public class LODVolume : MonoBehaviour
     public const string HLODLayer = "HLOD";
     public static Type meshSimplifierType { set; get; }
     public static Type batcherType { set; get; }
-    public static bool drawBounds { set; get; }
 
     private bool dirty;
 
@@ -278,12 +277,13 @@ public class LODVolume : MonoBehaviour
 #if UNITY_EDITOR
     void OnDrawGizmos()
     {
-        if (drawBounds)
+        if (Settings.ShowVolumeBounds)
         {
             var depth = GetDepth(transform);
             DrawGizmos(Mathf.Max(1f - Mathf.Pow(0.9f, depth), 0.2f), GetDepthColor(depth));
         }
     }
+
 
     void OnDrawGizmosSelected()
     {
