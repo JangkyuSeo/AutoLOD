@@ -338,6 +338,9 @@ public class LODVolume : MonoBehaviour
         var lodRenderers = new List<Renderer>();
         CleanupHLOD();
 
+        if (hlodRenderers.Count == 0 )
+            yield break;
+
         GameObject hlodRootContainer = null;
         yield return ObjectUtils.FindGameObject(k_HLODRootContainer, root =>
         {
