@@ -29,21 +29,37 @@ public class LODVolume : MonoBehaviour
     [SerializeField]
     private List<LODVolume> childVolumes = new List<LODVolume>();
 
+    private LODGroup m_LodGroup;
+
+    public GameObject HLODRoot
+    {
+        set { hlodRoot = value; }
+        get { return hlodRoot; }
+    }
+
+    public List<LODGroup> LodGroups
+    {
+        get { return m_LodGroups; }
+    }
+
+    public LODGroup LodGroup
+    {
+        set { m_LodGroup = value;}
+        get { return m_LodGroup; }
+    }
+
 
     const HideFlags k_DefaultHideFlags = HideFlags.None;
     const ushort k_VolumeSplitCount = 32;//ushort.MaxValue;
     const string k_DefaultName = "LODVolumeNode";
-    const string k_HLODRootContainer = "HLODs";
+
     const int k_Splits = 2;
 
     static int s_VolumesCreated;
 
-    
-    List<object> m_Cached = new List<object>();
-
     IMeshSimplifier m_MeshSimplifier;
 
-    private LODGroup m_LodGroup;
+    
 
     static readonly Color[] k_DepthColors = new Color[]
     {
@@ -239,29 +255,29 @@ public class LODVolume : MonoBehaviour
     }
     
 
-    IEnumerator Shrink()
-    {
-        var populatedChildrenNodes = new List<LODVolume>();
-        foreach (Transform child in transform)
-        {
-            var lodVolume = child.GetComponent<LODVolume>();
-            var lodGroups = lodVolume.m_LodGroups;
-            if (lodGroups != null && lodGroups.Count > 0)
-                populatedChildrenNodes.Add(lodVolume);
+    //IEnumerator Shrink()
+    //{
+    //    var populatedChildrenNodes = new List<LODVolume>();
+    //    foreach (Transform child in transform)
+    //    {
+    //        var lodVolume = child.GetComponent<LODVolume>();
+    //        var lodGroups = lodVolume.m_LodGroups;
+    //        if (lodGroups != null && lodGroups.Count > 0)
+    //            populatedChildrenNodes.Add(lodVolume);
 
-            yield return null;
-        }
+    //        yield return null;
+    //    }
 
-        if (populatedChildrenNodes.Count == 1)
-        {
-            var newRootVolume = populatedChildrenNodes[0];
-            newRootVolume.transform.parent = null;
-            CleanupHLOD();
-            DestroyImmediate(gameObject);
+    //    if (populatedChildrenNodes.Count == 1)
+    //    {
+    //        var newRootVolume = populatedChildrenNodes[0];
+    //        newRootVolume.transform.parent = null;
+    //        CleanupHLOD();
+    //        DestroyImmediate(gameObject);
 
-            yield return newRootVolume.Shrink();
-        }
-    }
+    //        yield return newRootVolume.Shrink();
+    //    }
+    //}
 
     static Bounds GetCuboidBounds(Bounds bounds)
     {
@@ -299,129 +315,9 @@ public class LODVolume : MonoBehaviour
         Gizmos.DrawWireCube(bounds.center, bounds.size);
     }
 
-    [ContextMenu("GenerateHLOD")]
-    void GenerateHLODContext()
-    {
-        MonoBehaviourHelper.StartCoroutine(GenerateHLOD());
-    }
-
-    public IEnumerator UpdateHLODs()
-    {
-        // Process children first, since we are now combining children HLODs to make parent HLODs
-        foreach (Transform child in transform)
-        {
-            var childLODVolume = child.GetComponent<LODVolume>();
-            if (childLODVolume)
-                yield return childLODVolume.UpdateHLODs();
-
-            if (!this)
-                yield break;
-        }
-        yield return GenerateHLOD(false);
-    }
-
-
-    public IEnumerator GenerateHLOD(bool propagateUpwards = true)
-    {
-        HashSet<Renderer> hlodRenderers = new HashSet<Renderer>();
-
-        foreach( var group in m_LodGroups)
-        {
-            var lastLod = group.GetLODs().Last();
-            foreach (var lr in lastLod.renderers)
-            {
-                if (lr && lr.GetComponent<MeshFilter>())
-                    hlodRenderers.Add(lr);
-            }
-        }
-
-        var lodRenderers = new List<Renderer>();
-        CleanupHLOD();
-
-        if (hlodRenderers.Count == 0 )
-            yield break;
-
-        GameObject hlodRootContainer = null;
-        yield return ObjectUtils.FindGameObject(k_HLODRootContainer, root =>
-        {
-            if (root)
-                hlodRootContainer = root;
-        });
-
-        if (!hlodRootContainer)
-        {
-            hlodRootContainer = new GameObject(k_HLODRootContainer);
-            hlodRootContainer.AddComponent<SceneLODUpdater>();
-        }
-
-        var hlodLayer = LayerMask.NameToLayer(HLODLayer);
-
-        hlodRoot = new GameObject("HLOD");
-        hlodRoot.layer = hlodLayer;
-        hlodRoot.transform.parent = hlodRootContainer.transform;
-
-
-        var parent = hlodRoot.transform;
-        foreach (var r in hlodRenderers)
-        {
-            var rendererTransform = r.transform;
-
-            var child = new GameObject(r.name, typeof(MeshFilter), typeof(MeshRenderer));
-            child.layer = hlodLayer;
-            var childTransform = child.transform;
-            childTransform.SetPositionAndRotation(rendererTransform.position, rendererTransform.rotation);
-            childTransform.localScale = rendererTransform.lossyScale;
-            childTransform.SetParent(parent, true);
-
-            var mr = child.GetComponent<MeshRenderer>();
-            EditorUtility.CopySerialized(r.GetComponent<MeshFilter>(), child.GetComponent<MeshFilter>());
-            EditorUtility.CopySerialized(r.GetComponent<MeshRenderer>(), mr);
-
-            lodRenderers.Add(mr);
-        }
-
-        LOD lod = new LOD();
-        LOD detailLOD = new LOD();
-
-        detailLOD.screenRelativeTransitionHeight = 0.3f;
-        lod.screenRelativeTransitionHeight = 0.0f;
-        
-        var lodGroup = GetComponent<LODGroup>();
-        if (!lodGroup)
-            lodGroup = gameObject.AddComponent<LODGroup>();
-
-        m_LodGroup = lodGroup;
-
-
-        var batcher = (IBatcher)Activator.CreateInstance(batcherType);
-        yield return batcher.Batch(hlodRoot);
-
-        lod.renderers = hlodRoot.GetComponentsInChildren<Renderer>(false);
-        lodGroup.SetLODs(new LOD[] { detailLOD, lod });
-
-        if (propagateUpwards)
-        {
-            var lodVolumeParent = transform.parent;
-            var parentLODVolume = lodVolumeParent ? lodVolumeParent.GetComponentInParent<LODVolume>() : null;
-            if (parentLODVolume)
-                yield return parentLODVolume.GenerateHLOD();
-        }
-    }
+   
 #endif
 
-    void CleanupHLOD()
-    {
-        if (hlodRoot) // Clean up old HLOD
-        {
-#if UNITY_EDITOR
-            var mf = hlodRoot.GetComponent<MeshFilter>();
-            if (mf)
-                DestroyImmediate(mf.sharedMesh, true); // Clean up file on disk
-#endif
-            DestroyImmediate(hlodRoot);
-        }
-    }
-    
 #if UNITY_EDITOR
     [ContextMenu("GenerateLODs")]
     void GenerateLODsContext()
