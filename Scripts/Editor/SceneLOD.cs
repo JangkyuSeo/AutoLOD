@@ -149,114 +149,6 @@ namespace UnityEditor.Experimental.AutoLOD
 
             yield return m_RootVolume.SetLODGruops(lodGroups);
         }
-        public IEnumerator UpdateHLODs(LODVolume volume)
-        {
-            // Process children first, since we are now combining children HLODs to make parent HLODs
-            foreach (Transform child in volume.transform)
-            {
-                var childLODVolume = child.GetComponent<LODVolume>();
-                if (childLODVolume)
-                    yield return UpdateHLODs(childLODVolume);
-
-                if (!this)
-                    yield break;
-            }
-            yield return GenerateHLOD(volume);
-        }
-
-
-        public IEnumerator GenerateHLOD(LODVolume volume)
-        {
-            HashSet<Renderer> hlodRenderers = new HashSet<Renderer>();
-
-            foreach (var group in volume.LodGroups)
-            {
-                var lastLod = group.GetLODs().Last();
-                foreach (var lr in lastLod.renderers)
-                {
-                    if (lr && lr.GetComponent<MeshFilter>())
-                        hlodRenderers.Add(lr);
-                }
-            }
-
-            CleanupHLOD(volume);
-
-            if (hlodRenderers.Count == 0)
-                yield break;
-
-            GameObject hlodRootContainer = null;
-            yield return ObjectUtils.FindGameObject(k_HLODRootContainer, root =>
-            {
-                if (root)
-                    hlodRootContainer = root;
-            });
-
-            if (!hlodRootContainer)
-            {
-                hlodRootContainer = new GameObject(k_HLODRootContainer);
-                hlodRootContainer.AddComponent<SceneLODUpdater>();
-            }
-
-            var hlodLayer = LayerMask.NameToLayer(LODVolume.HLODLayer);
-            var hlodRoot = new GameObject("HLOD " + volume.gameObject.name);
-            hlodRoot.layer = LayerMask.NameToLayer(LODVolume.HLODLayer);
-            hlodRoot.transform.parent = hlodRootContainer.transform;
-
-            volume.HLODRoot = hlodRoot;
-
-
-            var parent = hlodRoot.transform;
-            foreach (var r in hlodRenderers)
-            {
-                var rendererTransform = r.transform;
-
-                var child = new GameObject(r.name, typeof(MeshFilter), typeof(MeshRenderer));
-                child.layer = hlodLayer;
-                var childTransform = child.transform;
-                childTransform.SetPositionAndRotation(rendererTransform.position, rendererTransform.rotation);
-                childTransform.localScale = rendererTransform.lossyScale;
-                childTransform.SetParent(parent, true);
-
-                var mr = child.GetComponent<MeshRenderer>();
-                EditorUtility.CopySerialized(r.GetComponent<MeshFilter>(), child.GetComponent<MeshFilter>());
-                EditorUtility.CopySerialized(r.GetComponent<MeshRenderer>(), mr);
-            }
-
-            LOD lod = new LOD();
-            LOD detailLOD = new LOD();
-
-            detailLOD.screenRelativeTransitionHeight = 0.3f;
-            lod.screenRelativeTransitionHeight = 0.0f;
-
-            var lodGroup = volume.GetComponent<LODGroup>();
-            if (!lodGroup)
-                lodGroup = volume.gameObject.AddComponent<LODGroup>();
-
-            volume.LodGroup = lodGroup;
-
-
-            var batcher = (IBatcher)System.Activator.CreateInstance(LODVolume.batcherType);
-            yield return batcher.Batch(hlodRoot);
-
-            lod.renderers = hlodRoot.GetComponentsInChildren<Renderer>(false);
-            lodGroup.SetLODs(new LOD[] { detailLOD, lod });
-        }
-
-        
-        void CleanupHLOD(LODVolume volume)
-        {
-            var root = volume.HLODRoot;
-            if (root) // Clean up old HLOD
-            {
-                var mf = root.GetComponent<MeshFilter>();
-                if (mf)
-                    DestroyImmediate(mf.sharedMesh, true); // Clean up file on disk
-
-                DestroyImmediate(root);
-
-                volume.HLODRoot = null;
-            }
-        }
 
 
         IEnumerator SetRootLODVolume()
@@ -309,7 +201,7 @@ namespace UnityEditor.Experimental.AutoLOD
             m_ServiceCoroutineExecutionTime.Start();
 
             yield return UpdateOctree();
-            yield return UpdateHLODs(m_RootVolume);
+            yield return SceneLODCreator.instance.CreateHLODs(m_RootVolume);
             
             m_ServiceCoroutineExecutionTime.Reset();
         }

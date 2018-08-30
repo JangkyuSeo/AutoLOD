@@ -36,7 +36,7 @@ namespace UnityEditor.Experimental.AutoLOD
             get { return EditorPrefs.GetInt(k_MaxExecutionTime, k_DefaultMaxExecutionTime); }
         }
 
-        static Type meshSimplifierType
+        public static Type meshSimplifierType
         {
             set
             {
