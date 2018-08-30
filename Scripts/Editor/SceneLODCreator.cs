@@ -27,12 +27,16 @@ namespace UnityEditor.Experimental.AutoLOD
             }
         }
 
+
+        //TODO: Move to option this later.
+        private const bool k_UseSimplificationHLOD = true;
+
         private const int k_MaxWorkerCount = 4;
         private const string k_HLODRootContainer = "HLODs";
 
         private GameObject m_HLODRootContainer;
 
-        public IEnumerator CreateHLODs(LODVolume volume)
+        public IEnumerator CreateHLODs(LODVolume volume, Action finishAction)
         {
             yield return ObjectUtils.FindGameObject(k_HLODRootContainer, root =>
             {
@@ -46,7 +50,20 @@ namespace UnityEditor.Experimental.AutoLOD
                 m_HLODRootContainer.AddComponent<SceneLODUpdater>();
             }
 
+            //m_HLODRootContainer.SetActive(false);
+
             yield return CreateHLODsReculsive(volume);
+
+            //StartCustomCoroutine(EnqueueAction(() => { m_HLODRootContainer.SetActive(true); }), 1);
+            StartCustomCoroutine(EnqueueAction(finishAction), 1);
+        }
+
+        IEnumerator EnqueueAction(Action action)
+        {
+            if (action != null)
+                action();
+
+            yield break;
         }
 
         IEnumerator CreateHLODsReculsive(LODVolume volume)
@@ -59,51 +76,70 @@ namespace UnityEditor.Experimental.AutoLOD
                     yield return CreateHLODsReculsive(childLODVolume);
             }
 
-            StartCustomCoroutine(GenerateHLOD(volume));
+            StartCustomCoroutine(GenerateHLOD(volume), 0);
+            //yield return GenerateHLOD(volume);
+        }
+
+        public bool IsCreating()
+        {
+            return m_JobContainer.Count != 0;
+        }
+
+        public void CancelCreating()
+        {
+            m_JobContainer.Clear();
         }
 
 
         void OnEnable()
         {
-            m_WorkContainer.Clear();
+            m_JobContainer.Clear();
             EditorApplication.update += EditorUpdate;
         }
 
        
         void OnDisable()
         {
-            m_WorkContainer.Clear();
+            m_JobContainer.Clear();
             EditorApplication.update -= EditorUpdate;
         }
 
-        private void StartCustomCoroutine(IEnumerator func)
+        private void StartCustomCoroutine(IEnumerator func, int priority)
         {
-            Stack<IEnumerator> stack = new Stack<IEnumerator>();
-            stack.Push(func);
+            Job job = new Job();
+            job.Priority = priority;
+            job.FunctionStack.Push(func);
 
-            m_WorkContainer.Add(stack);
+            if ( m_JobContainer.ContainsKey(priority) == false)
+                m_JobContainer[priority] = new List<Job>();
+
+            List<Job> list = m_JobContainer[priority];
+            list.Add(job);
         }
         private void EditorUpdate()
         {
-            if (m_WorkContainer.Count == 0)
+            if (m_JobContainer.Count == 0)
                 return;
 
-            int containerCount = m_WorkContainer.Count;
+            //After all jobs of the previous priority are finished, the next priority should be executed.
+            var firstItem = m_JobContainer.First();
+            var jobList = firstItem.Value;
+            int containerCount = jobList.Count;
 
             for (int i = 0; i < containerCount;)
             {
-                Stack<IEnumerator> stack = m_WorkContainer[i];
+                Job job = jobList[i];
 
                 while (true)
                 {
-                    if (stack.Count == 0)
+                    if (job.FunctionStack.Count == 0)
                     {
-                        m_WorkContainer.RemoveAt(i);
+                        jobList.RemoveAt(i);
                         containerCount -= 1;
                         break;
                     }
 
-                    IEnumerator func = stack.Peek();
+                    IEnumerator func = job.FunctionStack.Peek();
                     if (func.MoveNext())
                     {
                         if (func.Current == null)
@@ -114,22 +150,27 @@ namespace UnityEditor.Experimental.AutoLOD
 
                         if (func.Current is IEnumerator)
                         {
-                            stack.Push(func.Current as IEnumerator);
+                            job.FunctionStack.Push(func.Current as IEnumerator);
                         }
                         else if (func.Current is MoveToEnd)
                         {
-                            m_WorkContainer.RemoveAt(i);
-                            m_WorkContainer.Add(stack);
+                            jobList.RemoveAt(i);
+                            jobList.Add(job);
                             containerCount -= 1;
                             break;
                         }
                     }
                     else
                     {
-                        stack.Pop();
+                        job.FunctionStack.Pop();
                     }
                 }
 	     
+            }
+
+            if (jobList.Count == 0)
+            {
+                m_JobContainer.Remove(firstItem.Key);
             }
         }
 
@@ -280,6 +321,14 @@ namespace UnityEditor.Experimental.AutoLOD
                 meshes.Add(mesh);
             }
 
+            if (k_UseSimplificationHLOD == false)
+            {
+                if (returnCallback != null)
+                    returnCallback(mesh);
+                
+                yield break;
+            }
+
  
             //where is resize?
             while (meshes.Count <= depth)
@@ -332,15 +381,17 @@ namespace UnityEditor.Experimental.AutoLOD
             {
                 returnCallback(meshes[depth]);
             }
-
-
         }
 
-        private Dictionary<Mesh, List<Mesh>> m_LODMeshes = new Dictionary<Mesh, List<Mesh>>();
 
-        private bool m_IsWorking = false;
-        private List<BackgroundWorker> m_Workers = new List<BackgroundWorker>();
-        private List<Stack<IEnumerator>> m_WorkContainer = new List<Stack<IEnumerator>>();
+        class Job
+        {
+            public int Priority;
+            public Stack<IEnumerator> FunctionStack = new Stack<IEnumerator>();
+        };
+
+        private Dictionary<Mesh, List<Mesh>> m_LODMeshes = new Dictionary<Mesh, List<Mesh>>();
+        private SortedDictionary<int, List<Job> > m_JobContainer = new SortedDictionary<int, List<Job> >();
 
     }
 

@@ -95,12 +95,16 @@ namespace UnityEditor.Experimental.AutoLOD
             Handles.BeginGUI();
             GUILayout.BeginArea(rect);
             GUILayout.BeginHorizontal();
-            if (m_RootVolume && GUILayout.Button(s_HLODEnabled ? "Disable HLOD" : "Enable HLOD"))
-            {
-                s_HLODEnabled = !s_HLODEnabled;
 
-                if ( m_RootVolume != null )
-                    m_RootVolume.ResetLODGroup();
+            if (SceneLODCreator.instance.IsCreating() == false)
+            {
+                if (m_RootVolume && GUILayout.Button(s_HLODEnabled ? "Disable HLOD" : "Enable HLOD"))
+                {
+                    s_HLODEnabled = !s_HLODEnabled;
+
+                    if (m_RootVolume != null)
+                        m_RootVolume.ResetLODGroup();
+                }
             }
 
             GUILayout.FlexibleSpace();
@@ -199,9 +203,18 @@ namespace UnityEditor.Experimental.AutoLOD
         IEnumerator ServiceCoroutineQueue()
         {
             m_ServiceCoroutineExecutionTime.Start();
+            SceneLODCreator.instance.CancelCreating();
+
+            s_HLODEnabled = false;
 
             yield return UpdateOctree();
-            yield return SceneLODCreator.instance.CreateHLODs(m_RootVolume);
+            yield return SceneLODCreator.instance.CreateHLODs(m_RootVolume, () =>
+            {
+                if (m_RootVolume != null)
+                    m_RootVolume.ResetLODGroup();
+
+                s_HLODEnabled = true;
+            });
             
             m_ServiceCoroutineExecutionTime.Reset();
         }
