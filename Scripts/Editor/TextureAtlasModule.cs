@@ -47,8 +47,6 @@ namespace UnityEditor.Experimental.AutoLOD
                     atlas = a;
                     break;
                 }
-
-                yield return null;
             }
 
             if (!atlas)
