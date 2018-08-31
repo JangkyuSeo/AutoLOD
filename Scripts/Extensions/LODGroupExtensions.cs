@@ -1,4 +1,6 @@
-﻿namespace UnityEngine.Experimental.AutoLOD
+﻿using System.Linq;
+
+namespace UnityEngine.Experimental.AutoLOD
 {
     public static class LODGroupExtensions
     {
@@ -93,6 +95,22 @@
         {
             var distance = (lodGroup.transform.TransformPoint(lodGroup.localReferencePoint) - camera.transform.position).magnitude;
             return DistanceToRelativeHeight(camera, distance, lodGroup.GetWorldSpaceSize()) * QualitySettings.lodBias;
+        }
+
+        public static Bounds GetBounds(this LODGroup lodGroup)
+        {
+            if ( lodGroup.GetLODs().Length == 0 )
+                return new Bounds(Vector3.zero, Vector3.zero);
+
+            LOD lod = lodGroup.GetLODs().First();
+            Bounds lodBounds = lod.renderers[0].bounds;
+
+            for (int i = 0; i < lod.renderers.Length; ++i)
+            {
+                lodBounds.Encapsulate(lod.renderers[i].bounds);
+            }
+
+            return lodBounds;
         }
 
     }

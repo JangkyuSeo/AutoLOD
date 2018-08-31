@@ -22,7 +22,6 @@ namespace UnityEditor.Experimental.AutoLOD.Utilities
 			set { s_HideFlags = value; }
 		}
 		static HideFlags s_HideFlags = HideFlags.DontSave;
-        static List<GameObject> s_RootGameObjects = new List<GameObject>();
 
 		public static GameObject Instantiate(GameObject prefab, Transform parent = null, bool worldPositionStays = true, bool runInEditMode = true, bool active = true)
 		{
@@ -329,11 +328,11 @@ namespace UnityEditor.Experimental.AutoLOD.Utilities
 	    public static IEnumerator FindObjectsOfType<T>(List<T> objects) where T : Component
 	    {
 	        var scene = SceneManager.GetActiveScene();
-	        s_RootGameObjects.Clear();
-	        scene.GetRootGameObjects(s_RootGameObjects);
+	        List<GameObject> rootGameObjects = new List<GameObject>();
+	        scene.GetRootGameObjects(rootGameObjects);
 	        yield return null;
 
-	        foreach (var go in s_RootGameObjects)
+	        foreach (var go in rootGameObjects)
 	        {
 	            var children = go.GetComponentsInChildren<T>();
 	            objects.AddRange(children);
@@ -362,9 +361,9 @@ namespace UnityEditor.Experimental.AutoLOD.Utilities
 	        else
 	        {
 	            var scene = SceneManager.GetActiveScene();
-	            s_RootGameObjects.Clear();
-                scene.GetRootGameObjects(s_RootGameObjects);
-	            foreach (var go in s_RootGameObjects)
+	            List<GameObject> rootGameObjects = new List<GameObject>();
+	            scene.GetRootGameObjects(rootGameObjects);
+	            foreach (var go in rootGameObjects)
 	            {
 	                yield return FindGameObject(name, callback, go);
 	            }

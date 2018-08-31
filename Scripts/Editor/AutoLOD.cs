@@ -36,7 +36,7 @@ namespace UnityEditor.Experimental.AutoLOD
             get { return EditorPrefs.GetInt(k_MaxExecutionTime, k_DefaultMaxExecutionTime); }
         }
 
-        static Type meshSimplifierType
+        public static Type meshSimplifierType
         {
             set
             {
@@ -127,6 +127,9 @@ namespace UnityEditor.Experimental.AutoLOD
             ModelImporterLODGenerator.maxLOD = maxLOD;
             ModelImporterLODGenerator.enabled = generateOnImport;
             ModelImporterLODGenerator.initialLODMaxPolyCount = initialLODMaxPolyCount;
+
+            if (!SceneLOD.instance)
+                Debug.Log("SceneLOD failed to start");
 #else
             ModelImporterLODGenerator.enabled = false;
 #endif

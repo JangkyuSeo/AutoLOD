@@ -149,8 +149,6 @@ namespace UnityEditor.Experimental.AutoLOD
                             updated[t] = true;
                         }
                     }
-
-                    yield return null;
                 }
                 mesh.uv = uv;
                 mesh.uv2 = null;
@@ -167,10 +165,7 @@ namespace UnityEditor.Experimental.AutoLOD
                 
 
                 mf.gameObject.SetActive(false);
-
-                yield return null;
             }
-
             var combinedMesh = new Mesh();
 #if UNITY_2017_3_OR_NEWER
             combinedMesh.indexFormat = IndexFormat.UInt32;
