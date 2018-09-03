@@ -20,15 +20,45 @@ namespace UnityEditor.Experimental.AutoLOD
             m_Atlases.AddRange(atlases);
         }
 
-        static void SaveUniqueAtlasAsset(UnityObject asset)
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="texture"></param>
+        /// <returns>imported texture</returns>
+        static Texture2D SaveTexture(Texture2D texture, string name)
+        {
+            var path = "AutoLOD/Generated/Atlases/" + name;
+            path = Path.ChangeExtension(path, "PNG");
+
+            var assetPath = "Assets/" + path;
+            var dataPath = Application.dataPath + "/" + path;
+
+            var dirPath = Path.GetDirectoryName(dataPath);
+            if (Directory.Exists(dirPath) == false)
+            {
+                Directory.CreateDirectory(dirPath);
+            }
+
+            byte[] binary = texture.EncodeToPNG();
+            File.WriteAllBytes(dataPath,binary);
+
+            AssetDatabase.ImportAsset(assetPath);
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+
+
+        }
+
+        static void SaveUniqueAtlasAsset(UnityObject asset, string name)
         {
             var directory = "Assets/AutoLOD/Generated/Atlases/";
             if (!Directory.Exists(directory))
                 Directory.CreateDirectory(directory);
 
-            var path = directory + Path.GetRandomFileName();
+            var path = directory + name;
             path = Path.ChangeExtension(path, "asset");
             AssetDatabase.CreateAsset(asset, path);
+
+
         }
 
         public IEnumerator GetTextureAtlas(Texture2D[] textures, Action<TextureAtlas> callback)
@@ -65,13 +95,18 @@ namespace UnityEditor.Experimental.AutoLOD
                     else if (!assetImporter)
                     {
                         // In-memory textures need to be saved to disk in order to be referenced by the texture atlas
-                        SaveUniqueAtlasAsset(t);
+                        SaveUniqueAtlasAsset(t, Path.GetRandomFileName());
                     }
                     yield return null;
                 }
 
-                var textureAtlas = new Texture2D(0, 0, TextureFormat.RGB24, true, PlayerSettings.colorSpace == ColorSpace.Linear);
-                var uvs = textureAtlas.PackTextures(textures.ToArray(), 0, 1024, true);
+                var textureAtlas = new Texture2D(0, 0, TextureFormat.RGBA32, true, PlayerSettings.colorSpace == ColorSpace.Linear);
+                var uvs = textureAtlas.PackTextures(textures.ToArray(), 0, 1024, false);
+
+                //for use same name texture and atlas.
+                var name = Path.GetRandomFileName();
+
+                textureAtlas = SaveTexture(textureAtlas, name);
                 
                 if (uvs != null)
                 {
@@ -79,8 +114,7 @@ namespace UnityEditor.Experimental.AutoLOD
                     atlas.uvs = uvs;
                     atlas.textures = textures;
 
-                    SaveUniqueAtlasAsset(textureAtlas);
-                    SaveUniqueAtlasAsset(atlas);
+                    SaveUniqueAtlasAsset(atlas, name);
                     
                     m_Atlases.Add(atlas);
                 }
