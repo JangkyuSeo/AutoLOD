@@ -68,16 +68,16 @@ namespace UnityEditor.Experimental.AutoLOD
 
         IEnumerator CreateHLODsReculsive(LODVolume volume)
         {
-            // Process children first, since we are now combining children HLODs to make parent HLODs
             foreach (Transform child in volume.transform)
             {
+                yield return GenerateHLODObject(volume);
+
                 var childLODVolume = child.GetComponent<LODVolume>();
                 if (childLODVolume)
                     yield return CreateHLODsReculsive(childLODVolume);
             }
 
-            StartCustomCoroutine(GenerateHLOD(volume), 0);
-            //yield return GenerateHLOD(volume);
+            StartCustomCoroutine(UpdateMesh(volume), 0);
         }
 
         public bool IsCreating()
@@ -174,8 +174,7 @@ namespace UnityEditor.Experimental.AutoLOD
             }
         }
 
-
-        IEnumerator GenerateHLOD(LODVolume volume)
+        IEnumerator GenerateHLODObject(LODVolume volume)
         {
             List<Renderer> hlodRenderers = new List<Renderer>();
             List<int> hlodRendererDepths = new List<int>();
@@ -207,14 +206,13 @@ namespace UnityEditor.Experimental.AutoLOD
 
             volume.HLODRoot = hlodRoot;
 
-
             var parent = hlodRoot.transform;
             for(int i = 0; i < hlodRenderers.Count; ++i)
             {
                 var r = hlodRenderers[i];
                 var rendererTransform = r.transform;
 
-                var child = new GameObject(r.name, typeof(MeshFilter), typeof(MeshRenderer));
+                var child = new GameObject(r.name, typeof(MeshFilter), typeof(MeshRenderer), typeof(DepthHolder));
                 child.layer = hlodLayer;
                 var childTransform = child.transform;
                 childTransform.SetPositionAndRotation(rendererTransform.position, rendererTransform.rotation);
@@ -223,10 +221,30 @@ namespace UnityEditor.Experimental.AutoLOD
 
                 var mr = child.GetComponent<MeshRenderer>();
                 var mf = child.GetComponent<MeshFilter>();
+                var dh = child.GetComponent<DepthHolder>();
+
                 EditorUtility.CopySerialized(r.GetComponent<MeshFilter>(), mf);
                 EditorUtility.CopySerialized(r.GetComponent<MeshRenderer>(), mr);
+                dh.Depth = hlodRendererDepths[i];
+            }
 
-                yield return GetLODMesh(r, hlodRendererDepths[i], (mesh) =>
+
+        }
+
+        IEnumerator UpdateMesh(LODVolume volume)
+        {
+            if ( volume.HLODRoot == null )
+                yield break;
+
+            foreach (Transform child in volume.HLODRoot.transform)
+            {
+                var r = child.GetComponent<Renderer>();
+                var mf = child.GetComponent<MeshFilter>();
+                var dh = child.GetComponent<DepthHolder>();
+                if ( r == null || mf == null|| dh == null)
+                    continue;
+
+                yield return GetLODMesh(r, dh.Depth, (mesh) =>
                 {
                     mf.sharedMesh = mesh;
                 });
@@ -246,9 +264,9 @@ namespace UnityEditor.Experimental.AutoLOD
 
 
             var batcher = (IBatcher)Activator.CreateInstance(LODVolume.batcherType);
-            yield return batcher.Batch(hlodRoot);
+            yield return batcher.Batch(volume.HLODRoot);
 
-            lod.renderers = hlodRoot.GetComponentsInChildren<Renderer>(false);
+            lod.renderers = volume.HLODRoot.GetComponentsInChildren<Renderer>(false);
             lodGroup.SetLODs(new LOD[] { detailLOD, lod });
         }
 
