@@ -69,58 +69,47 @@ namespace UnityEditor.Experimental.AutoLOD
             m_Atlases.RemoveAll(a => a == null);
             yield return null;
 
-            foreach (var a in m_Atlases)
+
+            atlas = ScriptableObject.CreateInstance<TextureAtlas>();
+
+            foreach (var t in textures)
             {
-                // At a minimum the atlas should have all of the textures requested, but can be a superset
-                if (!textures.Except(a.textures).Any())
+                var assetImporter = AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(t));
+                var textureImporter = assetImporter as TextureImporter;
+                if (textureImporter && !textureImporter.isReadable)
                 {
-                    atlas = a;
-                    break;
+                    textureImporter.isReadable = true;
+                    textureImporter.SaveAndReimport();
                 }
-            }
-
-            if (!atlas)
-            {
-                atlas = ScriptableObject.CreateInstance<TextureAtlas>();
-
-                foreach (var t in textures)
+                else if (!assetImporter)
                 {
-                    var assetImporter = AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(t));
-                    var textureImporter = assetImporter as TextureImporter;
-                    if (textureImporter && !textureImporter.isReadable)
-                    {
-                        textureImporter.isReadable = true;
-                        textureImporter.SaveAndReimport();
-                    }
-                    else if (!assetImporter)
-                    {
-                        // In-memory textures need to be saved to disk in order to be referenced by the texture atlas
-                        SaveUniqueAtlasAsset(t, Path.GetRandomFileName());
-                    }
-                    yield return null;
+                    // In-memory textures need to be saved to disk in order to be referenced by the texture atlas
+                    SaveUniqueAtlasAsset(t, Path.GetRandomFileName());
                 }
-
-                var textureAtlas = new Texture2D(0, 0, TextureFormat.RGBA32, true, PlayerSettings.colorSpace == ColorSpace.Linear);
-                var uvs = textureAtlas.PackTextures(textures.ToArray(), 0, 1024, false);
-
-                //for use same name texture and atlas.
-                var name = Path.GetRandomFileName();
-
-                textureAtlas = SaveTexture(textureAtlas, name);
-                
-                if (uvs != null)
-                {
-                    atlas.textureAtlas = textureAtlas;
-                    atlas.uvs = uvs;
-                    atlas.textures = textures;
-
-                    SaveUniqueAtlasAsset(atlas, name);
-                    
-                    m_Atlases.Add(atlas);
-                }
-
                 yield return null;
             }
+
+            var textureAtlas = new Texture2D(0, 0, TextureFormat.RGBA32, true, PlayerSettings.colorSpace == ColorSpace.Linear);
+            var uvs = textureAtlas.PackTextures(textures.ToArray(), 0, 1024, false);
+
+            //for use same name texture and atlas.
+            var name = Path.GetRandomFileName();
+
+            textureAtlas = SaveTexture(textureAtlas, name);
+
+            if (uvs != null)
+            {
+                atlas.textureAtlas = textureAtlas;
+                atlas.uvs = uvs;
+                atlas.textures = textures;
+
+                SaveUniqueAtlasAsset(atlas, name);
+
+                m_Atlases.Add(atlas);
+            }
+
+            yield return null;
+
 
             if (callback != null)
                 callback(atlas);

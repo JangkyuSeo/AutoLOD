@@ -29,7 +29,7 @@ namespace UnityEditor.Experimental.AutoLOD
 
 
         //TODO: Move to option this later.
-        private const bool k_UseSimplificationHLOD = true;
+        private const bool k_UseSimplificationHLOD = false;
 
         private const int k_MaxWorkerCount = 4;
         private const string k_HLODRootContainer = "HLODs";
@@ -54,6 +54,11 @@ namespace UnityEditor.Experimental.AutoLOD
 
             yield return CreateHLODsReculsive(volume);
 
+            var batcher = (IBatcher)Activator.CreateInstance(LODVolume.batcherType);
+            yield return batcher.Batch(m_HLODRootContainer);
+
+
+            yield return UpdateMeshReculsive(volume);
             //StartCustomCoroutine(EnqueueAction(() => { m_HLODRootContainer.SetActive(true); }), 1);
             StartCustomCoroutine(EnqueueAction(finishAction), 1);
         }
@@ -70,11 +75,21 @@ namespace UnityEditor.Experimental.AutoLOD
         {
             foreach (Transform child in volume.transform)
             {
-                yield return GenerateHLODObject(volume);
-
                 var childLODVolume = child.GetComponent<LODVolume>();
                 if (childLODVolume)
                     yield return CreateHLODsReculsive(childLODVolume);
+            }
+
+            yield return GenerateHLODObject(volume);
+        }
+
+        IEnumerator UpdateMeshReculsive(LODVolume volume)
+        {
+            foreach (Transform child in volume.transform)
+            {
+                var childLODVolume = child.GetComponent<LODVolume>();
+                if (childLODVolume)
+                    yield return UpdateMeshReculsive(childLODVolume);
             }
 
             StartCustomCoroutine(UpdateMesh(volume), 0);
@@ -261,10 +276,6 @@ namespace UnityEditor.Experimental.AutoLOD
                 lodGroup = volume.gameObject.AddComponent<LODGroup>();
 
             volume.LodGroup = lodGroup;
-
-
-            var batcher = (IBatcher)Activator.CreateInstance(LODVolume.batcherType);
-            yield return batcher.Batch(volume.HLODRoot);
 
             lod.renderers = volume.HLODRoot.GetComponentsInChildren<Renderer>(false);
             lodGroup.SetLODs(new LOD[] { detailLOD, lod });
