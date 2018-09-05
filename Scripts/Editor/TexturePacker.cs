@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -35,8 +36,9 @@ namespace UnityEditor.Experimental.AutoLOD
         {
             public List<GameObject> GameObjects;
             public HashSet<Texture2D> Textures;
+            public int PackableTextureCount;
 
-            
+
         }
 
         class Score
@@ -98,8 +100,8 @@ namespace UnityEditor.Experimental.AutoLOD
                     packTextures.Add(new PackTexture()
                     {
                         GameObjects = new List<GameObject>() {group.go},
-                        Textures = new HashSet<Texture2D>(group.textures)
-
+                        Textures = new HashSet<Texture2D>(group.textures),
+                        PackableTextureCount = maximum
                     });                    
                 }
 
@@ -127,7 +129,8 @@ namespace UnityEditor.Experimental.AutoLOD
                         PackTexture newPackTexture = new PackTexture()
                         {
                             GameObjects = newGameObjects,
-                            Textures = unionTextures
+                            Textures = unionTextures,
+                            PackableTextureCount = maximum
                         };
 
                         
@@ -153,18 +156,106 @@ namespace UnityEditor.Experimental.AutoLOD
 
                 foreach (var pack in packTextures)
                 {
-                    yield return TextureAtlasModule.instance.GetTextureAtlas(pack.Textures.ToArray(), atlas =>
+                    var atlas = MakeTextureAtlas(pack, 1024);
+                    atlasGroups.Add(new AtlasGroup()
                     {
-                        atlasGroups.Add(new AtlasGroup()
-                        {
-                            GameObjects = pack.GameObjects,
-                            Atlas = atlas
-                        });
+                        GameObjects = pack.GameObjects,
+                        Atlas = atlas
                     });
+
+                    yield return null;
                 }
                 
                 Debug.Log("Packing count : " + maximum + ", textures : " + packTextures.Count);
             }
+        }
+
+        private TextureAtlas MakeTextureAtlas(PackTexture packTexture, int packTextureSize)
+        {
+            TextureAtlas atlas = ScriptableObject.CreateInstance<TextureAtlas>();
+            Texture2D textureAtlas = new Texture2D(packTextureSize, packTextureSize, TextureFormat.RGBA32, false);
+
+            int itemCount = (int) Math.Sqrt(packTexture.PackableTextureCount);
+            int itemSize = packTextureSize / itemCount;
+
+            int index = 0;
+
+            atlas.uvs = new Rect[packTexture.Textures.Count];
+            atlas.textures = packTexture.Textures.ToArray();
+
+            foreach (var texture in atlas.textures)
+            {
+                int width, height;
+                Color[] buffer = GetTextureColors(texture, itemSize, out width, out height);
+
+                int col = index % itemCount;
+                int row = index / itemCount;
+
+                int x = col * itemSize;
+                int y = row * itemSize;
+
+                textureAtlas.SetPixels(x, y, width, height, buffer);
+
+                atlas.uvs[index] = new Rect(
+                    (float)x / (float)packTextureSize,
+                    (float)y / (float)packTextureSize,
+                    (float)width / (float)packTextureSize,
+                    (float)height / (float)packTextureSize);
+
+                index += 1;
+            }
+
+            textureAtlas.Apply();
+
+            atlas.textureAtlas = textureAtlas;
+
+            return atlas;
+        }
+
+
+        private Color[] GetTextureColors(Texture2D texture, int maxItemSize, out int width, out int height)
+        {
+            //make to texture readable.
+            var assetImporter = AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(texture));
+            var textureImporter = assetImporter as TextureImporter;
+            if (textureImporter && !textureImporter.isReadable)
+            {
+                textureImporter.isReadable = true;
+                textureImporter.SaveAndReimport();
+            }
+
+            int sideSize = Math.Max(texture.width, texture.height);
+
+            //if texture can put into an atlas by original size, go ahead.
+            //Also, check mipmap is able to put into an atlas.
+            for (int i = 0; i < texture.mipmapCount; ++i)
+            {
+                if ((sideSize >> i) <= maxItemSize)
+                {
+                    width = texture.width >> i;
+                    height = texture.height >> i;
+                    return texture.GetPixels(i);
+                }
+            }
+
+            //we should resize texture and return it buffers.
+            float ratio = (float)texture.width / (float)texture.height;
+            if (ratio > 1.0f)
+            {
+                width = maxItemSize;
+                height = (int)(maxItemSize / ratio);
+            }
+            else
+            {
+                width = (int) (maxItemSize / ratio);
+                height = maxItemSize;
+            }
+
+            Texture2D resizeTexture = new Texture2D(texture.width, texture.height, texture.format, false);
+            Graphics.CopyTexture(texture, resizeTexture);
+            resizeTexture.Resize(width, height);
+
+            return resizeTexture.GetPixels();
         }
 
         private int GetMaximumTextureCount(int packTextureSize, int maxPieceSize, int textureCount)
