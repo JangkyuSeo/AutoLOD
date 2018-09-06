@@ -1,18 +1,19 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using UnityEditor.Experimental.AutoLOD.Utilities;
+using Unity.AutoLOD.Utilities;
+using UnityEditor;
 using UnityEngine;
-using UnityEngine.Experimental.AutoLOD;
 using UnityEngine.SceneManagement;
 using Dbg = UnityEngine.Debug;
 using Debug = System.Diagnostics.Debug;
 using UnityObject = UnityEngine.Object;
 
 
-namespace UnityEditor.Experimental.AutoLOD
+namespace Unity.AutoLOD
 {
     public class SceneLOD : ScriptableSingleton<SceneLOD>
     {

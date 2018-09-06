@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections;
-namespace UnityEngine.Experimental.AutoLOD
+namespace Unity.AutoLOD
 {
     public interface IMeshSimplifier
     {

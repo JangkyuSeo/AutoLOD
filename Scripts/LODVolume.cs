@@ -4,11 +4,10 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using Unity.AutoLOD;
+using Unity.AutoLOD.Utilities;
 using UnityEditor;
-using UnityEditor.Experimental.AutoLOD;
-using UnityEditor.Experimental.AutoLOD.Utilities;
 using UnityEngine;
-using UnityEngine.Experimental.AutoLOD;
 using UnityEngine.Rendering;
 
 [RequiresLayer(HLODLayer)]
@@ -404,7 +403,11 @@ public class LODVolume : MonoBehaviour
             lodGroup.RecalculateBounds();
             lodGroup.ForceLOD(-1);
 
+#if UNITY_2018_2_OR_NEWER
             var prefab = PrefabUtility.GetCorrespondingObjectFromSource(go);
+#else
+            var prefab = PrefabUtility.GetPrefabParent(go);
+#endif
             if (prefab)
             {
                 var assetPath = AssetDatabase.GetAssetPath(prefab);

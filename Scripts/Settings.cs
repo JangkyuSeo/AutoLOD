@@ -1,8 +1,9 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using UnityEditor;
 using UnityEngine;
 
-namespace UnityEditor.Experimental.AutoLOD
+namespace Unity.AutoLOD
 {
     public static class Settings
     {

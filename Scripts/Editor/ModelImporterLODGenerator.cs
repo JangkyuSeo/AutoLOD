@@ -4,11 +4,12 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using Unity.AutoLOD;
+using UnityEditor;
 using UnityEngine;
-using UnityEngine.Experimental.AutoLOD;
 using UnityObject = UnityEngine.Object;
 
-namespace UnityEditor.Experimental.AutoLOD
+namespace Unity.AutoLOD
 {
     public class ModelImporterLODGenerator : AssetPostprocessor
     {
@@ -35,7 +36,7 @@ namespace UnityEditor.Experimental.AutoLOD
             {
                 if (go.GetComponentsInChildren<SkinnedMeshRenderer>().Any())
                 {
-                    Debug.Log("Automatic LOD generation on does not currently support skinned meshes on import");
+                    Debug.LogWarning("Automatic LOD generation on skinned meshes is not currently supported");
                     return;
                 }
 
@@ -242,7 +243,7 @@ namespace UnityEditor.Experimental.AutoLOD
                     var screenPercentage = i == maxLODFound ? 0.01f : Mathf.Pow(0.5f, i + 1);
 
                     // Use the model importer percentages if they exist
-                    if (i < importerLODLevels.arraySize)
+                    if (i < importerLODLevels.arraySize && maxLODFound == importerLODLevels.arraySize)
                     {
                         var element = importerLODLevels.GetArrayElementAtIndex(i);
                         screenPercentage = element.floatValue;
@@ -251,6 +252,10 @@ namespace UnityEditor.Experimental.AutoLOD
                     lod.screenRelativeTransitionHeight = screenPercentage;
                     lods.Add(lod);
                 }
+
+                if (importerLODLevels.arraySize != 0 && maxLODFound != importerLODLevels.arraySize)
+                    Debug.LogWarning("The model has an existing lod group, but it's settings will not be used because " +
+                        "the specified lod count in the AutoLOD settings is different.");
 
                 var lodGroup = go.AddComponent<LODGroup>();
                 lodGroup.SetLODs(lods.ToArray());

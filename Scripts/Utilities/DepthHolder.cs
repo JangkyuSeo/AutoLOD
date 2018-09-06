@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace UnityEngine.Experimental.AutoLOD
+namespace Unity.AutoLOD
 {
     public class DepthHolder : MonoBehaviour
     {

@@ -2,9 +2,10 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading;
+using UnityEditor;
 using UnityEngine;
 
-namespace UnityEditor.Experimental.AutoLOD
+namespace Unity.AutoLOD
 {
 
     /// <summary>

@@ -1,6 +1,7 @@
 ﻿using System.Linq;
+using UnityEngine;
 
-namespace UnityEngine.Experimental.AutoLOD
+namespace Unity.AutoLOD
 {
     public static class LODGroupExtensions
     {

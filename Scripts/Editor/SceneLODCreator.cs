@@ -6,13 +6,13 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
-using UnityEditor.Experimental.AutoLOD.Utilities;
+using Unity.AutoLOD.Utilities;
+using UnityEditor;
 using UnityEngine;
-using UnityEngine.Experimental.AutoLOD;
 using Mesh = UnityEngine.Mesh;
 using Object = UnityEngine.Object;
 
-namespace UnityEditor.Experimental.AutoLOD
+namespace Unity.AutoLOD
 {
     public class SceneLODCreator : ScriptableSingleton<SceneLODCreator>
     {

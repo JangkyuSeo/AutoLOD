@@ -3,9 +3,10 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using UnityEditor;
 using UnityEngine;
 
-namespace UnityEditor.Experimental.AutoLOD
+namespace Unity.AutoLOD
 {
     public class TexturePacker
     {

@@ -1,11 +1,17 @@
-﻿using System;
-using System.Collections;
+﻿#if ENABLE_UNITYMESHSIMPLIFIER
+using System;
+using Unity.AutoLOD;
 using UnityEngine;
 using UnityMeshSimplifier;
-using UnityEngine.Experimental.AutoLOD;
-using Mesh = UnityEngine.Experimental.AutoLOD.WorkingMesh;
+using Mesh = Unity.AutoLOD.WorkingMesh;
+#endif
 
-namespace UnityEditor.Experimental.AutoLOD
+#if UNITY_2017_3_OR_NEWER
+[assembly: Unity.AutoLOD.OptionalDependency("UnityMeshSimplifier.MeshSimplifier", "ENABLE_UNITYMESHSIMPLIFIER")]
+#endif
+
+#if ENABLE_UNITYMESHSIMPLIFIER
+namespace Unity.AutoLOD
 {
     public class QuadricMeshSimplifier : IMeshSimplifier
     {
@@ -52,3 +58,4 @@ namespace UnityEditor.Experimental.AutoLOD
 
     }
 }
+#endif
