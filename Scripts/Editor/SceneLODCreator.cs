@@ -29,7 +29,7 @@ namespace UnityEditor.Experimental.AutoLOD
 
 
         //TODO: Move to option this later.
-        private const bool k_UseSimplificationHLOD = false;
+        private const bool k_UseSimplificationHLOD = true;
 
         private const int k_MaxWorkerCount = 4;
         private const string k_HLODRootContainer = "HLODs";
@@ -55,12 +55,12 @@ namespace UnityEditor.Experimental.AutoLOD
             yield return CreateHLODsReculsive(volume);
 
             var batcher = (IBatcher)Activator.CreateInstance(LODVolume.batcherType);
-            yield return batcher.Batch(m_HLODRootContainer);
+            StartCustomCoroutine(batcher.Batch(m_HLODRootContainer), 1);
 
 
             yield return UpdateMeshReculsive(volume);
             //StartCustomCoroutine(EnqueueAction(() => { m_HLODRootContainer.SetActive(true); }), 1);
-            StartCustomCoroutine(EnqueueAction(finishAction), 1);
+            StartCustomCoroutine(EnqueueAction(finishAction), 3);
         }
 
         IEnumerator EnqueueAction(Action action)
@@ -93,6 +93,7 @@ namespace UnityEditor.Experimental.AutoLOD
             }
 
             StartCustomCoroutine(UpdateMesh(volume), 0);
+            StartCustomCoroutine(UpdateLODGroup(volume), 2);
         }
 
         public bool IsCreating()
@@ -264,7 +265,13 @@ namespace UnityEditor.Experimental.AutoLOD
                     mf.sharedMesh = mesh;
                 });
             }
+        }
 
+        IEnumerator UpdateLODGroup(LODVolume volume)
+        {
+            if ( volume.HLODRoot == null )
+                yield break;
+            
             LOD lod = new LOD();
             LOD detailLOD = new LOD();
 
