@@ -28,7 +28,6 @@ namespace Unity.AutoLOD
         static bool s_Activated;
         
         LODVolume m_RootVolume;
-        Stopwatch m_ServiceCoroutineExecutionTime = new Stopwatch();
 
         void Start()
         {
@@ -114,46 +113,7 @@ namespace Unity.AutoLOD
             Handles.EndGUI();
         }
 
-        IEnumerator UpdateOctree()
-        {
-            if (!m_RootVolume)
-            {
-                yield return SetRootLODVolume();
-
-                if (!m_RootVolume)
-                {
-
-                    Dbg.Log("Creating root volume");
-                    m_RootVolume = LODVolume.Create();
-
-                }
-            }
-
-            List<LODGroup> lodGroups = new List<LODGroup>();
-            yield return ObjectUtils.FindObjectsOfType(lodGroups);
-
-            int hlodLayerMask = LayerMask.NameToLayer(LODVolume.HLODLayer);
-
-            // Remove any lodgroups that should not be there (e.g. HLODs)
-            lodGroups.RemoveAll(r =>
-            {
-                if (r)
-                {
-                    if (r.gameObject.layer == hlodLayerMask)
-                        return true;
-
-                    LOD lastLod = r.GetLODs().Last();
-
-                    if (lastLod.renderers.Length == 0)
-                        return true;
-                }
-
-                return false;
-            });
-
-
-            yield return m_RootVolume.SetLODGruops(lodGroups);
-        }
+        
 
 
         IEnumerator SetRootLODVolume()
@@ -199,25 +159,11 @@ namespace Unity.AutoLOD
             {
                 MonoBehaviourHelper.StartCoroutine(SetRootLODVolume());
             }
-        }
 
-        IEnumerator ServiceCoroutineQueue()
-        {
-            m_ServiceCoroutineExecutionTime.Start();
-            SceneLODCreator.instance.CancelCreating();
-
-            s_HLODEnabled = false;
-
-            yield return UpdateOctree();
-            yield return SceneLODCreator.instance.CreateHLODs(m_RootVolume, () =>
+            if (SceneLODCreator.instance.IsCreating() == true)
             {
-                if (m_RootVolume != null)
-                    m_RootVolume.ResetLODGroup();
-
-                s_HLODEnabled = true;
-            });
-            
-            m_ServiceCoroutineExecutionTime.Reset();
+                s_HLODEnabled = false;
+            }
         }
 
         // PreCull is called before LODGroup updates
@@ -252,7 +198,7 @@ namespace Unity.AutoLOD
         [MenuItem(k_GenerateSceneLODMenuPath, priority = 1)]
         static void GenerateSceneLOD(MenuCommand menuCommand)
         {
-            MonoBehaviourHelper.StartCoroutine(instance.ServiceCoroutineQueue());            
+            EditorWindow.GetWindow<GenerateSceneLODWindow>(false, "Generate SceneLOD").Show();
         }
 
 

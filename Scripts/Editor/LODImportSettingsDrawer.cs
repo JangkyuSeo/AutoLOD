@@ -26,7 +26,6 @@ namespace Unity.AutoLOD
             if (generateOnImportProperty.boolValue)
             {
                 PropertyTypeField<IMeshSimplifier>(property.FindPropertyRelative("meshSimplifier"));
-                PropertyTypeField<IBatcher>(property.FindPropertyRelative("batcher"));
 
                 var maxLODProperty = property.FindPropertyRelative("maxLODGenerated");
                 var maxLODValues = Enumerable.Range(0, LODData.MaxLOD + 1).ToArray();

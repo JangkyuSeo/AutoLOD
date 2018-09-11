@@ -11,7 +11,6 @@ namespace Unity.AutoLOD
         public static int maxLODGenerated { set; get; }
         public static int initialLODMaxPolyCount { set; get; }
         public static string meshSimplifier;
-        public static string batcher;
 
         SerializedProperty m_OverrideDefaults;
         SerializedProperty m_ImportSettings;
@@ -39,7 +38,6 @@ namespace Unity.AutoLOD
             {
                 m_ImportSettings.FindPropertyRelative("generateOnImport").boolValue = true;
                 m_ImportSettings.FindPropertyRelative("meshSimplifier").stringValue = meshSimplifier;
-                m_ImportSettings.FindPropertyRelative("batcher").stringValue = batcher;
                 m_ImportSettings.FindPropertyRelative("maxLODGenerated").intValue = maxLODGenerated;
                 m_ImportSettings.FindPropertyRelative("initialLODMaxPolyCount").intValue = initialLODMaxPolyCount;
             }

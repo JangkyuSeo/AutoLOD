@@ -24,5 +24,11 @@ namespace Unity.AutoLOD
                 yield return null;
             }
         }
+
+        public IBatcherOption GetBatcherOption()
+        {
+            return null;
+
+        }
     }
 }
