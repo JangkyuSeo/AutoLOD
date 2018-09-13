@@ -25,11 +25,14 @@ namespace Unity.AutoLOD
             public bool VolumeSimplification;
             public float VolumePolygonRatio;
 
+            public float DetailRange;
+
             public void SaveToEditorPrefs()
             {
                 EditorPrefs.SetInt(k_OptionStr + "VolumeSplitCount", VolumeSplitCount);
                 EditorPrefs.SetBool(k_OptionStr + "VolumeSimplification", VolumeSimplification);
                 EditorPrefs.SetFloat(k_OptionStr + "VolumePolygonRatio", VolumePolygonRatio);
+                EditorPrefs.SetFloat(k_OptionStr + "DetailRange", DetailRange);
             }
 
             public void LoadFromEditorPrefs()
@@ -37,6 +40,7 @@ namespace Unity.AutoLOD
                 VolumeSplitCount = EditorPrefs.GetInt(k_OptionStr + "VolumeSplitCount");
                 VolumeSimplification = EditorPrefs.GetBool(k_OptionStr + "VolumeSimplification");
                 VolumePolygonRatio = EditorPrefs.GetFloat(k_OptionStr + "VolumePolygonRatio");
+                DetailRange = EditorPrefs.GetFloat(k_OptionStr + "DetailRange");
             }
 
         }
@@ -148,7 +152,7 @@ namespace Unity.AutoLOD
             }
 
             StartCustomCoroutine(UpdateMesh(options, volume), CoroutineOrder.UpdateMesh);
-            StartCustomCoroutine(UpdateLODGroup(volume), CoroutineOrder.SetLODGroup);
+            StartCustomCoroutine(UpdateLODGroup(options, volume), CoroutineOrder.SetLODGroup);
         }
 
         IEnumerator CreateCoroutine(Options options, IBatcher batcher)
@@ -353,7 +357,7 @@ namespace Unity.AutoLOD
             }
         }
 
-        IEnumerator UpdateLODGroup(LODVolume volume)
+        IEnumerator UpdateLODGroup(Options options, LODVolume volume)
         {
             if ( volume.HLODRoot == null )
                 yield break;
@@ -361,7 +365,7 @@ namespace Unity.AutoLOD
             LOD lod = new LOD();
             LOD detailLOD = new LOD();
 
-            detailLOD.screenRelativeTransitionHeight = 0.3f;
+            detailLOD.screenRelativeTransitionHeight = options.DetailRange;
             lod.screenRelativeTransitionHeight = 0.0f;
 
             var lodGroup = volume.GetComponent<LODGroup>();
