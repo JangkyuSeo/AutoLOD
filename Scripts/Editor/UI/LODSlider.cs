@@ -125,8 +125,13 @@ namespace Unity.AutoLOD
                     {
                         m_RangeList[i].Draw(sliderBarPosition, kLODColors[i], startPosition);
                         //if default range has not existed then last range should not be drawn.
-                        if (i != m_RangeList.Count -1 || m_DefaultRange != null )
-                            m_RangeList[i].DrawCursor(sliderBarPosition);
+
+                        if (GUI.enabled == true)
+                        {
+                            if (i != m_RangeList.Count - 1 || m_DefaultRange != null)
+                                m_RangeList[i].DrawCursor(sliderBarPosition);
+                        }
+
                         startPosition = m_RangeList[i].EndPosition;
                     }
 

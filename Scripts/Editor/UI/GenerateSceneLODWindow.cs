@@ -23,6 +23,7 @@ namespace Unity.AutoLOD
             public readonly GUIContent LODGroupCount = EditorGUIUtility.TrTextContent("LODGroup count in level");
             public readonly GUIContent LODGroupSetting = EditorGUIUtility.TrTextContent("LODGroup setting");
             public readonly GUIContent BuildButton = EditorGUIUtility.TrTextContent("Build HLOD");
+            public readonly GUIContent DestoryButton = EditorGUIUtility.TrTextContent("Destroy HLOD");
             public readonly GUIContent CancelButton = EditorGUIUtility.TrTextContent("Cancel");
 
             public readonly GUIContent Batcher = EditorGUIUtility.TrTextContent("Batcher");
@@ -89,13 +90,6 @@ namespace Unity.AutoLOD
             slider.InsertRange("Detail", serializedObject.FindProperty("LODRange"));
             slider.InsertRange("LOD", null);
         }
-        
-
-        [MenuItem("AutoLOD/CreateWindow")]
-        static void Init()
-        {
-            EditorWindow.GetWindow<GenerateSceneLODWindow>(false, "Generate SceneLOD").Show();
-        }
 
   
         private void OnFocus()
@@ -130,6 +124,23 @@ namespace Unity.AutoLOD
 
         void OnGUI()
         {
+            if (SceneLOD.instance.RootVolume != null)
+            {
+                GUI.enabled = false;
+                DrawGenerate(false);
+                GUI.enabled = true;
+            }
+            else
+            {
+                DrawGenerate(true);
+            }
+
+            DrawButtons();
+            
+        }
+
+        void DrawGenerate(bool rootExists)
+        {
             if (options == null)
             {
                 Initialize();
@@ -144,18 +155,20 @@ namespace Unity.AutoLOD
 
             EditorGUI.BeginChangeCheck();
 
-            GUI.enabled = !SceneLODCreator.instance.IsCreating();
+            GUI.enabled = rootExists && !SceneLODCreator.instance.IsCreating();
             options.VolumeSplitCount = EditorGUILayout.IntField(Styles.LODGroupCount, options.VolumeSplitCount);
 
             DrawSlider();
             DrawBatcher();
             DrawSimplification();
-            DrawButtons();
+
 
             if (serializedObject.ApplyModifiedProperties() || EditorGUI.EndChangeCheck())
             {
                 options.SaveToEditorPrefs();
             }
+
+            GUI.enabled = true;
         }
 
         void DrawSlider()
@@ -205,15 +218,28 @@ namespace Unity.AutoLOD
 
         private void DrawButtons()
         {
-            
             if (SceneLODCreator.instance.IsCreating())
             {
                 GUI.enabled = false;
                 GUILayout.Button(Styles.BuildButton);
                 GUI.enabled = true;
+                EditorGUILayout.Space();
                 if (GUILayout.Button(Styles.CancelButton) == true)
                 {
                     SceneLODCreator.instance.CancelCreating();
+                }
+            }
+            else if (SceneLOD.instance.RootVolume != null)
+            {
+                if (GUILayout.Button(Styles.DestoryButton) == true)
+                {
+                    if (SceneLOD.instance.RootVolume != null)
+                        SceneLOD.instance.RootVolume.ResetLODGroup();
+
+                    MonoBehaviourHelper.StartCoroutine(ObjectUtils.FindGameObject("HLODs",
+                        root => { DestroyImmediate(root); }));
+                    DestroyImmediate(SceneLOD.instance.RootVolume.gameObject);
+
                 }
             }
             else
@@ -230,6 +256,7 @@ namespace Unity.AutoLOD
             }
             EditorGUILayout.Space();
         }
+
     }
 
 }
