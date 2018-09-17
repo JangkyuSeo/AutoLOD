@@ -7,7 +7,6 @@ using UnityEngine;
 
 namespace Unity.AutoLOD
 {
-    [Serializable]
     class LODSliderRange
     {
         class GUIStyles
@@ -33,14 +32,23 @@ namespace Unity.AutoLOD
             }
         }
 
-        [SerializeField]
-        public string Name;
-        [SerializeField]
-        public float EndPosition;
+        public string Name { set; get; }
+        public SerializedProperty Property { set; get; }
 
+        public float EndPosition
+        {
+            get
+            {
+                if (Property == null)
+                    return 0.0f;
+
+                return Property.floatValue;
+            }
+        }
 
         public Rect GetResizeArea(Rect sliderArea)
         {
+            
             float pos = sliderArea.width * (1.0f - Mathf.Sqrt(EndPosition));
             return new Rect(sliderArea.x + pos - 5.0f, sliderArea.y, 10.0f, sliderArea.height );
         }

@@ -17,7 +17,8 @@ namespace Unity.AutoLOD
 {
     public class SceneLODCreator : ScriptableSingleton<SceneLODCreator>
     {
-        public struct Options
+        [Serializable]
+        public class Options : ScriptableObject
         {
             private const string k_OptionStr = "AutoLOD.Options.";
 
@@ -25,22 +26,22 @@ namespace Unity.AutoLOD
             public bool VolumeSimplification;
             public float VolumePolygonRatio;
 
-            public float DetailRange;
+            public float LODRange;
 
             public void SaveToEditorPrefs()
             {
                 EditorPrefs.SetInt(k_OptionStr + "VolumeSplitCount", VolumeSplitCount);
                 EditorPrefs.SetBool(k_OptionStr + "VolumeSimplification", VolumeSimplification);
                 EditorPrefs.SetFloat(k_OptionStr + "VolumePolygonRatio", VolumePolygonRatio);
-                EditorPrefs.SetFloat(k_OptionStr + "DetailRange", DetailRange);
+                EditorPrefs.SetFloat(k_OptionStr + "LODRange", LODRange);
             }
 
             public void LoadFromEditorPrefs()
             {
-                VolumeSplitCount = EditorPrefs.GetInt(k_OptionStr + "VolumeSplitCount");
-                VolumeSimplification = EditorPrefs.GetBool(k_OptionStr + "VolumeSimplification");
-                VolumePolygonRatio = EditorPrefs.GetFloat(k_OptionStr + "VolumePolygonRatio");
-                DetailRange = EditorPrefs.GetFloat(k_OptionStr + "DetailRange");
+                VolumeSplitCount = EditorPrefs.GetInt(k_OptionStr + "VolumeSplitCount", 32);
+                VolumeSimplification = EditorPrefs.GetBool(k_OptionStr + "VolumeSimplification", true);
+                VolumePolygonRatio = EditorPrefs.GetFloat(k_OptionStr + "VolumePolygonRatio", 0.5f);
+                LODRange = EditorPrefs.GetFloat(k_OptionStr + "LODRange", 0.3f);
             }
 
         }
@@ -64,7 +65,6 @@ namespace Unity.AutoLOD
             }
         }
 
-        private const int k_MaxWorkerCount = 4;
         private const string k_HLODRootContainer = "HLODs";
 
         private GameObject m_HLODRootContainer;
@@ -365,7 +365,7 @@ namespace Unity.AutoLOD
             LOD lod = new LOD();
             LOD detailLOD = new LOD();
 
-            detailLOD.screenRelativeTransitionHeight = options.DetailRange;
+            detailLOD.screenRelativeTransitionHeight = options.LODRange;
             lod.screenRelativeTransitionHeight = 0.0f;
 
             var lodGroup = volume.GetComponent<LODGroup>();

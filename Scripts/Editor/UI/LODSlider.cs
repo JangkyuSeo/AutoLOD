@@ -40,10 +40,7 @@ namespace Unity.AutoLOD
         private int m_SelectedIndex = -1;
         private LODSliderRange m_DefaultRange = null;
 
-        [SerializeField]
         private List<LODSliderRange> m_RangeList = new List<LODSliderRange>();
-
-        private SerializedObject serialized;
 
         private static GUIStyles Styles
         {
@@ -57,17 +54,19 @@ namespace Unity.AutoLOD
 
         public LODSlider(bool useDefault = false, string name = "")
         {
-            serialized = new SerializedObject(this);
             if (useDefault == true)
             {
                 var defaultRange = new LODSliderRange();
                 defaultRange.Name = name;
-                defaultRange.EndPosition = 0.0f;
             }
         }
 
-        public void InsertRange(string name, float endPosition)
+        public void InsertRange(string name, SerializedProperty property)
         {
+            float endPosition = 0.0f;
+            if (property != null)
+                endPosition = property.floatValue;
+
             if (m_DefaultRange == null && m_RangeList.Count == 0)
             {
                 endPosition = 0.0f;
@@ -75,7 +74,7 @@ namespace Unity.AutoLOD
 
             var range = new LODSliderRange();
             range.Name = name;
-            range.EndPosition = endPosition;
+            range.Property = property;
 
             int insertPosition = 0;
 
@@ -90,16 +89,16 @@ namespace Unity.AutoLOD
             m_RangeList.Insert(insertPosition, range);
         }
 
-        public float GetRangeValue(string name)
-        {
-            for (int i = 0; i < m_RangeList.Count; ++i)
-            {
-                if (m_RangeList[i].Name == name)
-                    return m_RangeList[i].EndPosition;
-            }
+        //public float GetRangeValue(string name)
+        //{
+        //    for (int i = 0; i < m_RangeList.Count; ++i)
+        //    {
+        //        if (m_RangeList[i].Name == name)
+        //            return m_RangeList[i].EndPosition;
+        //    }
 
-            return 1.0f;
-        }
+        //    return 1.0f;
+        //}
 
         public int GetRangeCount()
         {
@@ -109,8 +108,6 @@ namespace Unity.AutoLOD
 
         public void Draw()
         {
-            serialized.Update();
-
             var sliderBarPosition = GUILayoutUtility.GetRect(0, k_SliderBarHeight, GUILayout.ExpandWidth(true));
             sliderBarPosition.width -= 5;   //< for margin
 
@@ -170,9 +167,11 @@ namespace Unity.AutoLOD
 
                         var percentage = 1.0f - Mathf.Clamp((evt.mousePosition.x - sliderBarPosition.x) / sliderBarPosition.width, 0.01f, 1.0f);
                         percentage = (percentage * percentage);
-   
-                        var property = serialized.FindProperty(string.Format("m_RangeList.Array.data[{0}].EndPosition", m_SelectedIndex));
-                        property.floatValue = percentage;
+
+                        if (m_RangeList[m_SelectedIndex].Property != null)
+                        {
+                            m_RangeList[m_SelectedIndex].Property.floatValue = percentage;
+                        }
                     }
                     break;
                 }
@@ -187,8 +186,6 @@ namespace Unity.AutoLOD
                     break;
                 }
             }
-
-            serialized.ApplyModifiedProperties();
         }
 
     }

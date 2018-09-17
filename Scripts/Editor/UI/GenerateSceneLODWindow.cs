@@ -56,6 +56,8 @@ namespace Unity.AutoLOD
 
         private SceneLODCreator.Options options;
 
+        private SerializedObject serializedObject;
+
 
         public GenerateSceneLODWindow()
         {
@@ -63,14 +65,18 @@ namespace Unity.AutoLOD
 
         void OnEnable()
         {
+            options = new SceneLODCreator.Options();
+            serializedObject = new SerializedObject(options);
+
             slider = new LODSlider();
-            slider.InsertRange("Detail", 0.0f);
-            slider.InsertRange("LOD", options.DetailRange);
+            slider.InsertRange("Detail", serializedObject.FindProperty("LODRange"));
+            slider.InsertRange("LOD", null);
         }
 
         void OnDisable()
         {
-
+            serializedObject = null;
+            options = null;
         }
         [MenuItem("AutoLOD/CreateWindow")]
         static void Init()
@@ -112,6 +118,8 @@ namespace Unity.AutoLOD
         void OnGUI()
         {
 
+            serializedObject.Update();
+
             if (currentBatcher == null)
             {
                 EditorGUILayout.HelpBox(Styles.NoBatcherMsg);
@@ -123,10 +131,11 @@ namespace Unity.AutoLOD
             GUI.enabled = !SceneLODCreator.instance.IsCreating();
             options.VolumeSplitCount = EditorGUILayout.IntField(Styles.LODGroupCount, options.VolumeSplitCount);
 
+            //EditorGUILayout.PropertyField()
+
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.PrefixLabel(Styles.LODGroupSetting);
             slider.Draw();
-            options.DetailRange = slider.GetRangeValue("LOD");
             EditorGUILayout.EndHorizontal();            
             EditorGUILayout.Space();
 
@@ -135,7 +144,7 @@ namespace Unity.AutoLOD
 
             DrawButtons();
 
-            if (EditorGUI.EndChangeCheck())
+            if (serializedObject.ApplyModifiedProperties() || EditorGUI.EndChangeCheck())
             {
                 options.SaveToEditorPrefs();
             }
