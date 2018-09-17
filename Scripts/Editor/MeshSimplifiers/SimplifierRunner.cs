@@ -55,8 +55,11 @@ namespace Unity.AutoLOD
             m_Workers.Clear();
             m_SimplificationActions.Clear();
             m_CompleteActions.Clear();
+        }
 
-            
+        public void Cancel()
+        {
+            m_SimplificationActions.Clear();
         }
 
         private void Worker_DoWork(object sender, DoWorkEventArgs e)

@@ -17,9 +17,7 @@ namespace Unity.AutoLOD
 {
     public class SceneLOD : ScriptableSingleton<SceneLOD>
     {
-        private const string k_GenerateSceneLODMenuPath = "AutoLOD/Generate SceneLOD";
-        private const string k_DestroySceneLODMenuPath = "AutoLOD/Destroy SceneLOD";
-        private const string k_UpdateSceneLODMenuPath = "AutoLOD/Update SceneLOD";
+        private const string k_SceneLODWindowMenuPath = "AutoLOD/Generate SceneLOD Window";
         private const string k_ShowVolumeBoundsMenuPath = "AutoLOD/Show Volume Bounds";
 
         private const string k_HLODRootContainer = "HLODs";
@@ -28,7 +26,16 @@ namespace Unity.AutoLOD
         static bool s_Activated;
         
         LODVolume m_RootVolume;
-        Stopwatch m_ServiceCoroutineExecutionTime = new Stopwatch();
+
+        public LODVolume RootVolume
+        {
+            get { return m_RootVolume; }
+        }
+
+        public void EnableHLOD()
+        {
+            s_HLODEnabled = true;
+        }
 
         void Start()
         {
@@ -113,47 +120,7 @@ namespace Unity.AutoLOD
             GUILayout.EndArea();
             Handles.EndGUI();
         }
-
-        IEnumerator UpdateOctree()
-        {
-            if (!m_RootVolume)
-            {
-                yield return SetRootLODVolume();
-
-                if (!m_RootVolume)
-                {
-
-                    Dbg.Log("Creating root volume");
-                    m_RootVolume = LODVolume.Create();
-
-                }
-            }
-
-            List<LODGroup> lodGroups = new List<LODGroup>();
-            yield return ObjectUtils.FindObjectsOfType(lodGroups);
-
-            int hlodLayerMask = LayerMask.NameToLayer(LODVolume.HLODLayer);
-
-            // Remove any lodgroups that should not be there (e.g. HLODs)
-            lodGroups.RemoveAll(r =>
-            {
-                if (r)
-                {
-                    if (r.gameObject.layer == hlodLayerMask)
-                        return true;
-
-                    LOD lastLod = r.GetLODs().Last();
-
-                    if (lastLod.renderers.Length == 0)
-                        return true;
-                }
-
-                return false;
-            });
-
-
-            yield return m_RootVolume.SetLODGruops(lodGroups);
-        }
+        
 
 
         IEnumerator SetRootLODVolume()
@@ -199,25 +166,11 @@ namespace Unity.AutoLOD
             {
                 MonoBehaviourHelper.StartCoroutine(SetRootLODVolume());
             }
-        }
 
-        IEnumerator ServiceCoroutineQueue()
-        {
-            m_ServiceCoroutineExecutionTime.Start();
-            SceneLODCreator.instance.CancelCreating();
-
-            s_HLODEnabled = false;
-
-            yield return UpdateOctree();
-            yield return SceneLODCreator.instance.CreateHLODs(m_RootVolume, () =>
+            if (SceneLODCreator.instance.IsCreating() == true)
             {
-                if (m_RootVolume != null)
-                    m_RootVolume.ResetLODGroup();
-
-                s_HLODEnabled = true;
-            });
-            
-            m_ServiceCoroutineExecutionTime.Reset();
+                s_HLODEnabled = false;
+            }
         }
 
         // PreCull is called before LODGroup updates
@@ -243,49 +196,10 @@ namespace Unity.AutoLOD
 #region Menu
         //AutoLOD requires Unity 2017.3 or a later version
 #if UNITY_2017_3_OR_NEWER
-        [MenuItem(k_GenerateSceneLODMenuPath, true, priority = 1)]
-        static bool CanGenerateSceneLOD(MenuCommand menuCommand)
-        {
-            return instance.m_RootVolume == null;
-        }
-
-        [MenuItem(k_GenerateSceneLODMenuPath, priority = 1)]
+        [MenuItem(k_SceneLODWindowMenuPath, priority = 1)]
         static void GenerateSceneLOD(MenuCommand menuCommand)
         {
-            MonoBehaviourHelper.StartCoroutine(instance.ServiceCoroutineQueue());            
-        }
-
-
-        [MenuItem(k_DestroySceneLODMenuPath, true, priority = 1)]
-        static bool CanDestroySceneLOD(MenuCommand menuCommand)
-        {
-            return instance.m_RootVolume != null;
-        }
-
-        [MenuItem(k_DestroySceneLODMenuPath, priority = 1)]
-        static void DestroySceneLOD(MenuCommand menuCommand)
-        {
-            
-            if (instance.m_RootVolume != null)
-                instance.m_RootVolume.ResetLODGroup();
-
-            MonoBehaviourHelper.StartCoroutine(ObjectUtils.FindGameObject("HLODs",
-                root => { DestroyImmediate(root); }));
-            DestroyImmediate(instance.m_RootVolume.gameObject);
-
-        }
-
-        [MenuItem(k_UpdateSceneLODMenuPath, true, priority = 1)]
-        static bool CanUpdateSceneLOD(MenuCommand menuCommand)
-        {
-            return instance.m_RootVolume != null;
-        }
-
-        [MenuItem(k_UpdateSceneLODMenuPath, priority = 1)]
-        static void UpdateSceneLOD(MenuCommand menuCommand)
-        {
-            DestroySceneLOD(menuCommand);
-            GenerateSceneLOD(menuCommand);
+            EditorWindow.GetWindow<GenerateSceneLODWindow>(false, "Generate SceneLOD").Show();
         }
 
         [MenuItem(k_ShowVolumeBoundsMenuPath, priority = 50)]

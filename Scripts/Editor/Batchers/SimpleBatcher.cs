@@ -5,6 +5,7 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
+using EditorGUI = UnityEditor.EditorGUI;
 
 namespace Unity.AutoLOD
 {
@@ -37,6 +38,7 @@ namespace Unity.AutoLOD
         }
 
         Texture2D m_WhiteTexture;
+        private SimpleBatcherOption option = new SimpleBatcherOption();
         private TexturePacker packer = new TexturePacker();
 
         Texture2D GetTexture(Material m)
@@ -190,10 +192,24 @@ namespace Unity.AutoLOD
                 }
 
                 var meshRenderer = go.AddComponent<MeshRenderer>();
-                var material = new Material(Shader.Find("Custom/AutoLOD/SimpleBatcher"));
+                Material material = null;
+                if (option.BatchMaterial == null)
+                {
+                    material = new Material(Shader.Find("Custom/AutoLOD/SimpleBatcher"));
+                }
+                else
+                {
+                    material = new Material(option.BatchMaterial);
+                }
+
                 material.mainTexture = atlas.textureAtlas;
                 meshRenderer.sharedMaterial = material;
             }
+        }
+
+        public IBatcherOption GetBatcherOption()
+        {
+            return option;
         }
 
         private IEnumerator PackTextures(GameObject hlodRoot)
@@ -216,7 +232,140 @@ namespace Unity.AutoLOD
                 yield return null;
             }
 
-            yield return packer.Pack(1024, 256);
+            yield return packer.Pack(option.PackTextureSize, option.LimitTextureSize);
+        }
+    }
+
+    class SimpleBatcherOption : IBatcherOption
+    {
+        const string k_PackTextureSelect = "AutoLOD.SimpleBatch.PackTextureSelect";
+        const string k_LimitTextureSelect = "AutoLOD.SimpleBatch.LimitTextureSelect";
+        const string k_MaterialGUID = "AutoLOD.SimpleBatch.MaterialGUID";
+        class GUIStyles
+        {
+            public readonly string[] PackTextureSizeContents =
+            {
+                "128",
+                "256",
+                "512",
+                "1024",
+                "2048"
+            };
+
+            public readonly string[] LimitTextureSizeContents =
+            {
+                "32",
+                "64",
+                "128",
+                "256",
+                "512"
+            };
+
+            public readonly GUIContent PackTextureSize = EditorGUIUtility.TrTextContent("Pack texture size");
+            public readonly GUIContent LimitTextureSize = EditorGUIUtility.TrTextContent("Limit texture size");
+
+            public GUIStyles()
+            {
+
+            }
+
+        }
+
+        private static GUIStyles s_Styles;
+        private static GUIStyles Styles
+        {
+            get
+            {
+                if (s_Styles == null)
+                    s_Styles = new GUIStyles();
+                return s_Styles;
+            }
+        }
+
+        private int packTextureSelect = 3;  //< default size is 1024
+        private int limitTextureSelect = 2; //< default size is 128
+
+        private Material batchMaterial;
+
+        public int PackTextureSize
+        {
+            get
+            {
+                string str = Styles.PackTextureSizeContents[packTextureSelect];
+                return int.Parse(str);
+            }
+        }
+
+        public int LimitTextureSize
+        {
+            get
+            {
+                string str = Styles.LimitTextureSizeContents[limitTextureSelect];
+                return int.Parse(str);
+            }
+        }
+
+        public Material BatchMaterial
+        {
+            get { return batchMaterial; }
+        }
+
+        public SimpleBatcherOption()
+        {
+            if (EditorPrefs.HasKey(k_PackTextureSelect))
+                packTextureSelect = EditorPrefs.GetInt(k_PackTextureSelect, 3);
+            if (EditorPrefs.HasKey(k_LimitTextureSelect))
+                limitTextureSelect = EditorPrefs.GetInt(k_LimitTextureSelect, 2);
+            if (EditorPrefs.HasKey(k_MaterialGUID))
+            {
+                do
+                {
+                    string guid = EditorPrefs.GetString(k_MaterialGUID, null);
+                    if (string.IsNullOrEmpty(guid))
+                        break;
+
+                    string path  =AssetDatabase.GUIDToAssetPath(guid);
+                    if (string.IsNullOrEmpty(path))
+                        break;
+
+                    batchMaterial = AssetDatabase.LoadAssetAtPath<Material>(path);
+                } while (false);   
+            }
+        }
+        public void OnGUI()
+        {
+            EditorGUI.BeginChangeCheck();
+            packTextureSelect = EditorGUILayout.Popup(Styles.PackTextureSize, packTextureSelect, Styles.PackTextureSizeContents);
+            if (EditorGUI.EndChangeCheck())
+            {
+                EditorPrefs.SetInt(k_PackTextureSelect, packTextureSelect);
+            }
+
+            EditorGUI.BeginChangeCheck();
+            limitTextureSelect = EditorGUILayout.Popup(Styles.LimitTextureSize, limitTextureSelect, Styles.LimitTextureSizeContents);
+            if (EditorGUI.EndChangeCheck())
+            {
+                EditorPrefs.SetInt(k_LimitTextureSelect, limitTextureSelect);
+            }
+
+            EditorGUI.BeginChangeCheck();
+            batchMaterial = EditorGUILayout.ObjectField("Material", batchMaterial, typeof(Material), false) as Material;
+            if (EditorGUI.EndChangeCheck())
+            {
+                string assetPath = null;
+                if ( batchMaterial != null)
+                    assetPath = AssetDatabase.GetAssetPath(batchMaterial);
+
+                if (string.IsNullOrEmpty(assetPath))
+                {
+                    EditorPrefs.DeleteKey(k_MaterialGUID);
+                }
+                else
+                {
+                    string guid = AssetDatabase.AssetPathToGUID(assetPath);
+                    EditorPrefs.SetString(k_MaterialGUID, guid);
+                }
+            }
         }
     }
 }

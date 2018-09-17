@@ -10,5 +10,12 @@ namespace Unity.AutoLOD
         /// </summary>
         /// <param name="go">GameObject hierarchy to batch</param>
         IEnumerator Batch(GameObject hlodRoot);
+
+        IBatcherOption GetBatcherOption();
+    }
+
+    public interface IBatcherOption
+    {
+        void OnGUI();
     }
 }

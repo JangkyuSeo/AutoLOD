@@ -158,7 +158,7 @@ namespace Unity.AutoLOD
 
                 foreach (var pack in packTextures)
                 {
-                    var atlas = MakeTextureAtlas(pack, 1024);
+                    var atlas = MakeTextureAtlas(pack, packTextureSize);
                     atlasGroups.Add(new AtlasGroup()
                     {
                         GameObjects = pack.GameObjects,

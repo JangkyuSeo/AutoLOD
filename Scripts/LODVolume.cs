@@ -15,7 +15,6 @@ public class LODVolume : MonoBehaviour
 {
     public const string HLODLayer = "HLOD";
     public static Type meshSimplifierType { set; get; }
-    public static Type batcherType { set; get; }
 
     private bool dirty;
 
@@ -49,7 +48,6 @@ public class LODVolume : MonoBehaviour
 
 
     const HideFlags k_DefaultHideFlags = HideFlags.None;
-    const ushort k_VolumeSplitCount = 32;//ushort.MaxValue;
     const string k_DefaultName = "LODVolumeNode";
 
     const int k_Splits = 2;
@@ -91,7 +89,7 @@ public class LODVolume : MonoBehaviour
         return volume;
     }
 
-    public IEnumerator SetLODGruops(List<LODGroup> lodGroups)
+    public IEnumerator SetLODGruops(List<LODGroup> lodGroups, int volumeSplitCount)
     {
         m_LodGroups.Clear();
 
@@ -111,9 +109,9 @@ public class LODVolume : MonoBehaviour
             UpdateBounds();
         }
 
-        if (m_LodGroups.Count > k_VolumeSplitCount)
+        if (m_LodGroups.Count > volumeSplitCount)
         {
-            yield return Split();
+            yield return Split(volumeSplitCount);
         }
     }
 
@@ -135,13 +133,7 @@ public class LODVolume : MonoBehaviour
 
     }
 
-    [ContextMenu("Split")]
-    void SplitContext()
-    {
-        MonoBehaviourHelper.StartCoroutine(Split());
-    }
-
-    IEnumerator Split()
+    IEnumerator Split(int volumeSplitCount)
     {
         Vector3 size = bounds.size;
         size.x /= k_Splits;
@@ -171,7 +163,7 @@ public class LODVolume : MonoBehaviour
                         }
                     }
 
-                    yield return lodVolume.SetLODGruops(groups);
+                    yield return lodVolume.SetLODGruops(groups, volumeSplitCount);
 
                     childVolumes.Add(lodVolume);
                 }
@@ -179,14 +171,6 @@ public class LODVolume : MonoBehaviour
         }
     }
 
-    
-    [ContextMenu("Grow")]
-    void GrowContext()
-    {
-        var targetBounds = bounds;
-        targetBounds.center += Vector3.up;
-        MonoBehaviourHelper.StartCoroutine(Grow(targetBounds));
-    }
 
     IEnumerator Grow(Bounds targetBounds)
     {
@@ -253,31 +237,6 @@ public class LODVolume : MonoBehaviour
         }
     }
     
-
-    //IEnumerator Shrink()
-    //{
-    //    var populatedChildrenNodes = new List<LODVolume>();
-    //    foreach (Transform child in transform)
-    //    {
-    //        var lodVolume = child.GetComponent<LODVolume>();
-    //        var lodGroups = lodVolume.m_LodGroups;
-    //        if (lodGroups != null && lodGroups.Count > 0)
-    //            populatedChildrenNodes.Add(lodVolume);
-
-    //        yield return null;
-    //    }
-
-    //    if (populatedChildrenNodes.Count == 1)
-    //    {
-    //        var newRootVolume = populatedChildrenNodes[0];
-    //        newRootVolume.transform.parent = null;
-    //        CleanupHLOD();
-    //        DestroyImmediate(gameObject);
-
-    //        yield return newRootVolume.Shrink();
-    //    }
-    //}
-
     static Bounds GetCuboidBounds(Bounds bounds)
     {
         // Expand bounds side lengths to maintain a cube

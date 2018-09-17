@@ -19,7 +19,6 @@ namespace Unity.AutoLOD
         const int k_DefaultMaxExecutionTime = 8;
         const string k_DefaultMeshSimplifier = "AutoLOD.DefaultMeshSimplifier";
         const string k_DefaultMeshSimplifierDefault = "QuadricMeshSimplifier";
-        const string k_DefaultBatcher = "AutoLOD.DefaultBatcher";
         const string k_MaxLOD = "AutoLOD.MaxLOD";
         const int k_DefaultMaxLOD = 2;
         const string k_GenerateOnImport = "AutoLOD.GenerateOnImport";
@@ -53,27 +52,6 @@ namespace Unity.AutoLOD
                 var type = Type.GetType(EditorPrefs.GetString(k_DefaultMeshSimplifier, k_DefaultMeshSimplifierDefault));
                 if (type == null && meshSimplifiers.Length > 0)
                     type = Type.GetType(meshSimplifiers[0].AssemblyQualifiedName);
-                return type;
-            }
-        }
-
-        static Type batcherType
-        {
-            set
-            {
-                if (typeof(IBatcher).IsAssignableFrom(value))
-                    EditorPrefs.SetString(k_DefaultBatcher, value.AssemblyQualifiedName);
-                else if (value == null)
-                    EditorPrefs.DeleteKey(k_DefaultBatcher);
-
-                UpdateDependencies();
-            }
-            get
-            {
-                var batchers = ObjectUtils.GetImplementationsOfInterface(typeof(IBatcher)).ToArray();
-                var type = Type.GetType(EditorPrefs.GetString(k_DefaultBatcher, null));
-                if (type == null && batchers.Length > 0)
-                    type = Type.GetType(batchers[0].AssemblyQualifiedName);
                 return type;
             }
         }
@@ -115,13 +93,11 @@ namespace Unity.AutoLOD
 #if UNITY_2017_3_OR_NEWER
             MonoBehaviourHelper.maxSharedExecutionTimeMS = maxExecutionTime == 0 ? Mathf.Infinity : maxExecutionTime;
 
-            LODDataEditor.meshSimplifier = meshSimplifierType.AssemblyQualifiedName;
-            LODDataEditor.batcher = batcherType.AssemblyQualifiedName;
+            LODDataEditor.meshSimplifier = meshSimplifierType.AssemblyQualifiedName;            
             LODDataEditor.maxLODGenerated = maxLOD;
             LODDataEditor.initialLODMaxPolyCount = initialLODMaxPolyCount;
 
             LODVolume.meshSimplifierType = meshSimplifierType;
-            LODVolume.batcherType = batcherType;
 
             ModelImporterLODGenerator.meshSimplifierType = meshSimplifierType;
             ModelImporterLODGenerator.maxLOD = maxLOD;
@@ -582,24 +558,6 @@ namespace Unity.AutoLOD
                 else
                 {
                     EditorGUILayout.HelpBox("No IMeshSimplifiers found!", MessageType.Warning);
-                }
-            }
-
-            // Batcher
-            {
-                var type = batcherType;
-                if (type != null)
-                {
-                    var batchers = ObjectUtils.GetImplementationsOfInterface(typeof(IBatcher)).ToList();
-                    var displayedOptions = batchers.Select(t => t.Name).ToArray();
-                    EditorGUI.BeginChangeCheck();
-                    var selected = EditorGUILayout.Popup("Default Batcher", Array.IndexOf(displayedOptions, type.Name), displayedOptions);
-                    if (EditorGUI.EndChangeCheck())
-                        batcherType = batchers[selected];
-                }
-                else
-                {
-                    EditorGUILayout.HelpBox("No IBatchers found!", MessageType.Warning);
                 }
             }
 

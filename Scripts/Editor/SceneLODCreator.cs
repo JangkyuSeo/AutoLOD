@@ -11,11 +11,48 @@ using UnityEditor;
 using UnityEngine;
 using Mesh = UnityEngine.Mesh;
 using Object = UnityEngine.Object;
+using Dbg = UnityEngine.Debug;
 
 namespace Unity.AutoLOD
 {
     public class SceneLODCreator : ScriptableSingleton<SceneLODCreator>
     {
+        public class Options : ScriptableObject
+        {
+            private const string k_OptionStr = "AutoLOD.Options.";
+
+            public int VolumeSplitCount;
+            public bool VolumeSimplification;
+            public float VolumePolygonRatio;
+
+            public float LODRange;
+
+            public void SaveToEditorPrefs()
+            {
+                EditorPrefs.SetInt(k_OptionStr + "VolumeSplitCount", VolumeSplitCount);
+                EditorPrefs.SetBool(k_OptionStr + "VolumeSimplification", VolumeSimplification);
+                EditorPrefs.SetFloat(k_OptionStr + "VolumePolygonRatio", VolumePolygonRatio);
+                EditorPrefs.SetFloat(k_OptionStr + "LODRange", LODRange);
+            }
+
+            public void LoadFromEditorPrefs()
+            {
+                VolumeSplitCount = EditorPrefs.GetInt(k_OptionStr + "VolumeSplitCount", 32);
+                VolumeSimplification = EditorPrefs.GetBool(k_OptionStr + "VolumeSimplification", true);
+                VolumePolygonRatio = EditorPrefs.GetFloat(k_OptionStr + "VolumePolygonRatio", 0.5f);
+                LODRange = EditorPrefs.GetFloat(k_OptionStr + "LODRange", 0.3f);
+            }
+
+        }
+
+        enum CoroutineOrder
+        {
+            Main,
+            UpdateMesh,
+            Batch,
+            SetLODGroup,
+            Finish,
+        }
         /// <summary>
         /// job will be moved to end of queue.
         /// </summary>
@@ -27,22 +64,47 @@ namespace Unity.AutoLOD
             }
         }
 
-
-        //TODO: Move to option this later.
-        private const bool k_UseSimplificationHLOD = true;
-
-        private const int k_MaxWorkerCount = 4;
         private const string k_HLODRootContainer = "HLODs";
 
         private GameObject m_HLODRootContainer;
+        private LODVolume m_RootVolume;
 
-        public IEnumerator CreateHLODs(LODVolume volume, Action finishAction)
+
+        IEnumerator CreateOctree(Options options)
         {
-            yield return ObjectUtils.FindGameObject(k_HLODRootContainer, root =>
+            m_RootVolume = LODVolume.Create();
+
+            List<LODGroup> lodGroups = new List<LODGroup>();
+            yield return ObjectUtils.FindObjectsOfType(lodGroups);
+
+            int hlodLayerMask = LayerMask.NameToLayer(LODVolume.HLODLayer);
+
+            // Remove any lodgroups that should not be there (e.g. HLODs)
+            lodGroups.RemoveAll(r =>
             {
-                if (root)
-                    m_HLODRootContainer = root;
+                if (r)
+                {
+                    if (r.gameObject.layer == hlodLayerMask)
+                        return true;
+
+                    LOD lastLod = r.GetLODs().Last();
+
+                    if (lastLod.renderers.Length == 0)
+                        return true;
+                }
+
+                return false;
             });
+
+
+            yield return m_RootVolume.SetLODGruops(lodGroups, options.VolumeSplitCount);
+        }
+        IEnumerator CreateHLODs(Options options, IBatcher batcher, Action finishAction)
+        {
+
+            var updater = FindObjectOfType<SceneLODUpdater>();
+            if (updater != null)
+                m_HLODRootContainer = updater.gameObject;
 
             if (!m_HLODRootContainer)
             {
@@ -52,15 +114,11 @@ namespace Unity.AutoLOD
 
             //m_HLODRootContainer.SetActive(false);
 
-            yield return CreateHLODsReculsive(volume);
-
-            var batcher = (IBatcher)Activator.CreateInstance(LODVolume.batcherType);
-            StartCustomCoroutine(batcher.Batch(m_HLODRootContainer), 1);
-
-
-            yield return UpdateMeshReculsive(volume);
+            yield return CreateHLODsReculsive(m_RootVolume);
+            yield return UpdateMeshReculsive(options, m_RootVolume);
+            StartCustomCoroutine(batcher.Batch(m_HLODRootContainer), CoroutineOrder.Batch);
             //StartCustomCoroutine(EnqueueAction(() => { m_HLODRootContainer.SetActive(true); }), 1);
-            StartCustomCoroutine(EnqueueAction(finishAction), 3);
+            StartCustomCoroutine(EnqueueAction(finishAction), CoroutineOrder.Finish);
         }
 
         IEnumerator EnqueueAction(Action action)
@@ -83,17 +141,33 @@ namespace Unity.AutoLOD
             yield return GenerateHLODObject(volume);
         }
 
-        IEnumerator UpdateMeshReculsive(LODVolume volume)
+        IEnumerator UpdateMeshReculsive(Options options, LODVolume volume)
         {
             foreach (Transform child in volume.transform)
             {
                 var childLODVolume = child.GetComponent<LODVolume>();
                 if (childLODVolume)
-                    yield return UpdateMeshReculsive(childLODVolume);
+                    yield return UpdateMeshReculsive(options, childLODVolume);
             }
 
-            StartCustomCoroutine(UpdateMesh(volume), 0);
-            StartCustomCoroutine(UpdateLODGroup(volume), 2);
+            StartCustomCoroutine(UpdateMesh(options, volume), CoroutineOrder.UpdateMesh);
+            StartCustomCoroutine(UpdateLODGroup(options, volume), CoroutineOrder.SetLODGroup);
+        }
+
+        IEnumerator CreateCoroutine(Options options, IBatcher batcher)
+        {
+            yield return CreateOctree(options);
+            yield return CreateHLODs(options, batcher, () =>
+            {
+                if (m_RootVolume != null)
+                    m_RootVolume.ResetLODGroup();
+            });
+        }
+
+        public void Create(Options options, IBatcher batcher, Action finishAction)
+        {
+            StartCustomCoroutine(CreateCoroutine(options, batcher),CoroutineOrder.Main);
+            StartCustomCoroutine(EnqueueAction(finishAction), CoroutineOrder.Finish);
         }
 
         public bool IsCreating()
@@ -104,6 +178,7 @@ namespace Unity.AutoLOD
         public void CancelCreating()
         {
             m_JobContainer.Clear();
+            SimplifierRunner.instance.Cancel();
         }
 
 
@@ -111,6 +186,19 @@ namespace Unity.AutoLOD
         {
             m_JobContainer.Clear();
             EditorApplication.update += EditorUpdate;
+
+            var updater = FindObjectOfType<SceneLODUpdater>();
+            if (updater != null)
+                m_HLODRootContainer = updater.gameObject;
+            else
+                m_HLODRootContainer = null;
+
+            m_RootVolume = FindObjectOfType<LODVolume>();
+            while (m_RootVolume != null && m_RootVolume.transform.parent != null)
+            {
+                var parent = m_RootVolume.transform.parent;
+                m_RootVolume = parent.GetComponent<LODVolume>();
+            }
         }
 
        
@@ -120,16 +208,16 @@ namespace Unity.AutoLOD
             EditorApplication.update -= EditorUpdate;
         }
 
-        private void StartCustomCoroutine(IEnumerator func, int priority)
+        private void StartCustomCoroutine(IEnumerator func, CoroutineOrder priority)
         {
             Job job = new Job();
-            job.Priority = priority;
+            job.Priority = (int)priority;
             job.FunctionStack.Push(func);
 
-            if ( m_JobContainer.ContainsKey(priority) == false)
-                m_JobContainer[priority] = new List<Job>();
+            if ( m_JobContainer.ContainsKey(job.Priority) == false)
+                m_JobContainer[job.Priority] = new List<Job>();
 
-            List<Job> list = m_JobContainer[priority];
+            List<Job> list = m_JobContainer[job.Priority];
             list.Add(job);
         }
         private void EditorUpdate()
@@ -175,6 +263,8 @@ namespace Unity.AutoLOD
                             containerCount -= 1;
                             break;
                         }
+                        
+                        
                     }
                     else
                     {
@@ -247,7 +337,7 @@ namespace Unity.AutoLOD
 
         }
 
-        IEnumerator UpdateMesh(LODVolume volume)
+        IEnumerator UpdateMesh(Options options, LODVolume volume)
         {
             if ( volume.HLODRoot == null )
                 yield break;
@@ -260,14 +350,14 @@ namespace Unity.AutoLOD
                 if ( r == null || mf == null|| dh == null)
                     continue;
 
-                yield return GetLODMesh(r, dh.Depth, (mesh) =>
+                yield return GetLODMesh(options, r, dh.Depth, (mesh) =>
                 {
                     mf.sharedMesh = mesh;
                 });
             }
         }
 
-        IEnumerator UpdateLODGroup(LODVolume volume)
+        IEnumerator UpdateLODGroup(Options options, LODVolume volume)
         {
             if ( volume.HLODRoot == null )
                 yield break;
@@ -275,7 +365,7 @@ namespace Unity.AutoLOD
             LOD lod = new LOD();
             LOD detailLOD = new LOD();
 
-            detailLOD.screenRelativeTransitionHeight = 0.3f;
+            detailLOD.screenRelativeTransitionHeight = options.LODRange;
             lod.screenRelativeTransitionHeight = 0.0f;
 
             var lodGroup = volume.GetComponent<LODGroup>();
@@ -334,7 +424,7 @@ namespace Unity.AutoLOD
             return -1;
         }
 
-        IEnumerator GetLODMesh(Renderer renderer, int depth, Action<Mesh> returnCallback)
+        IEnumerator GetLODMesh(Options options, Renderer renderer, int depth, Action<Mesh> returnCallback)
         {
             var mf = renderer.GetComponent<MeshFilter>();
             if (mf == null || mf.sharedMesh == null)
@@ -343,6 +433,15 @@ namespace Unity.AutoLOD
             }
 
             var mesh = mf.sharedMesh;
+
+            if (options.VolumeSimplification == false)
+            {
+                if (returnCallback != null)
+                    returnCallback(mesh);
+                
+                yield break;
+            }
+
 
             List<Mesh> meshes;
             if (m_LODMeshes.ContainsKey(mesh))
@@ -356,15 +455,6 @@ namespace Unity.AutoLOD
 
                 meshes.Add(mesh);
             }
-
-            if (k_UseSimplificationHLOD == false)
-            {
-                if (returnCallback != null)
-                    returnCallback(mesh);
-                
-                yield break;
-            }
-
  
             //where is resize?
             while (meshes.Count <= depth)
@@ -377,14 +467,14 @@ namespace Unity.AutoLOD
                 //make simplification mesh by default mesh.
                 if (meshes[0] != null)
                 {
-                    float quality = Mathf.Pow(0.5f, depth + 1);
+                    float quality = Mathf.Pow(options.VolumePolygonRatio, depth + 1);
                     int expectTriangleCount = (int) (quality * meshes[0].triangles.Length);
 
                     //It need for avoid crash when simplificate in Simplygon
                     //Mesh has less vertices, it crashed when save prefab.
                     if (expectTriangleCount < 10)
                     {
-                        yield return GetLODMesh(renderer, depth -1, returnCallback);
+                        yield return GetLODMesh(options, renderer, depth -1, returnCallback);
                         yield break;
                     }
 
