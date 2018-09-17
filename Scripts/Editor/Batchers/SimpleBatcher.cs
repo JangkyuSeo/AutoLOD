@@ -192,7 +192,16 @@ namespace Unity.AutoLOD
                 }
 
                 var meshRenderer = go.AddComponent<MeshRenderer>();
-                var material = new Material(Shader.Find("Custom/AutoLOD/SimpleBatcher"));
+                Material material = null;
+                if (option.BatchMaterial == null)
+                {
+                    material = new Material(Shader.Find("Custom/AutoLOD/SimpleBatcher"));
+                }
+                else
+                {
+                    material = new Material(option.BatchMaterial);
+                }
+
                 material.mainTexture = atlas.textureAtlas;
                 meshRenderer.sharedMaterial = material;
             }
@@ -231,6 +240,7 @@ namespace Unity.AutoLOD
     {
         const string k_PackTextureSelect = "AutoLOD.SimpleBatch.PackTextureSelect";
         const string k_LimitTextureSelect = "AutoLOD.SimpleBatch.LimitTextureSelect";
+        const string k_MaterialGUID = "AutoLOD.SimpleBatch.MaterialGUID";
         class GUIStyles
         {
             public readonly string[] PackTextureSizeContents =
@@ -275,6 +285,8 @@ namespace Unity.AutoLOD
         private int packTextureSelect = 3;  //< default size is 1024
         private int limitTextureSelect = 2; //< default size is 128
 
+        private Material batchMaterial;
+
         public int PackTextureSize
         {
             get
@@ -293,12 +305,32 @@ namespace Unity.AutoLOD
             }
         }
 
+        public Material BatchMaterial
+        {
+            get { return batchMaterial; }
+        }
+
         public SimpleBatcherOption()
         {
             if (EditorPrefs.HasKey(k_PackTextureSelect))
-                packTextureSelect = EditorPrefs.GetInt(k_PackTextureSelect);
+                packTextureSelect = EditorPrefs.GetInt(k_PackTextureSelect, 3);
             if (EditorPrefs.HasKey(k_LimitTextureSelect))
-                limitTextureSelect = EditorPrefs.GetInt(k_LimitTextureSelect);
+                limitTextureSelect = EditorPrefs.GetInt(k_LimitTextureSelect, 2);
+            if (EditorPrefs.HasKey(k_MaterialGUID))
+            {
+                do
+                {
+                    string guid = EditorPrefs.GetString(k_MaterialGUID, null);
+                    if (string.IsNullOrEmpty(guid))
+                        break;
+
+                    string path  =AssetDatabase.GUIDToAssetPath(guid);
+                    if (string.IsNullOrEmpty(path))
+                        break;
+
+                    batchMaterial = AssetDatabase.LoadAssetAtPath<Material>(path);
+                } while (false);   
+            }
         }
         public void OnGUI()
         {
@@ -314,6 +346,25 @@ namespace Unity.AutoLOD
             if (EditorGUI.EndChangeCheck())
             {
                 EditorPrefs.SetInt(k_LimitTextureSelect, limitTextureSelect);
+            }
+
+            EditorGUI.BeginChangeCheck();
+            batchMaterial = EditorGUILayout.ObjectField("Material", batchMaterial, typeof(Material), false) as Material;
+            if (EditorGUI.EndChangeCheck())
+            {
+                string assetPath = null;
+                if ( batchMaterial != null)
+                    assetPath = AssetDatabase.GetAssetPath(batchMaterial);
+
+                if (string.IsNullOrEmpty(assetPath))
+                {
+                    EditorPrefs.DeleteKey(k_MaterialGUID);
+                }
+                else
+                {
+                    string guid = AssetDatabase.AssetPathToGUID(assetPath);
+                    EditorPrefs.SetString(k_MaterialGUID, guid);
+                }
             }
         }
     }
