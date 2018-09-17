@@ -17,7 +17,6 @@ namespace Unity.AutoLOD
 {
     public class SceneLODCreator : ScriptableSingleton<SceneLODCreator>
     {
-        [Serializable]
         public class Options : ScriptableObject
         {
             private const string k_OptionStr = "AutoLOD.Options.";
@@ -165,9 +164,10 @@ namespace Unity.AutoLOD
             });
         }
 
-        public void Create(Options options, IBatcher batcher)
+        public void Create(Options options, IBatcher batcher, Action finishAction)
         {
             StartCustomCoroutine(CreateCoroutine(options, batcher),CoroutineOrder.Main);
+            StartCustomCoroutine(EnqueueAction(finishAction), CoroutineOrder.Finish);
         }
 
         public bool IsCreating()

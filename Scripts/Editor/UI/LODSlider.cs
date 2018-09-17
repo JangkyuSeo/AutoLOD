@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace Unity.AutoLOD
 {
-    public class LODSlider : ScriptableObject
+    public class LODSlider
     {
         public readonly Color[] kLODColors =
         {

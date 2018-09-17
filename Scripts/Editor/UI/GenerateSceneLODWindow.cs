@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net.Configuration;
 using Unity.AutoLOD.Utilities;
 using UnityEditor;
+using UnityEditor.Build.Content;
 using UnityEditor.WindowsStandalone;
 using UnityEngine;
 
@@ -65,19 +66,31 @@ namespace Unity.AutoLOD
 
         void OnEnable()
         {
-            options = new SceneLODCreator.Options();
+            Initialize();
+
+        }
+
+        void OnDisable()
+        {
+            slider = null;
+
+            serializedObject = null;
+            options = null;
+        }
+
+        void Initialize()
+        {
+            options = CreateInstance<SceneLODCreator.Options>();
+            options.LoadFromEditorPrefs();
+
             serializedObject = new SerializedObject(options);
 
             slider = new LODSlider();
             slider.InsertRange("Detail", serializedObject.FindProperty("LODRange"));
             slider.InsertRange("LOD", null);
         }
+        
 
-        void OnDisable()
-        {
-            serializedObject = null;
-            options = null;
-        }
         [MenuItem("AutoLOD/CreateWindow")]
         static void Init()
         {
@@ -117,7 +130,10 @@ namespace Unity.AutoLOD
 
         void OnGUI()
         {
-
+            if (options == null)
+            {
+                Initialize();
+            }
             serializedObject.Update();
 
             if (currentBatcher == null)
@@ -131,17 +147,9 @@ namespace Unity.AutoLOD
             GUI.enabled = !SceneLODCreator.instance.IsCreating();
             options.VolumeSplitCount = EditorGUILayout.IntField(Styles.LODGroupCount, options.VolumeSplitCount);
 
-            //EditorGUILayout.PropertyField()
-
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.PrefixLabel(Styles.LODGroupSetting);
-            slider.Draw();
-            EditorGUILayout.EndHorizontal();            
-            EditorGUILayout.Space();
-
+            DrawSlider();
             DrawBatcher();
             DrawSimplification();
-
             DrawButtons();
 
             if (serializedObject.ApplyModifiedProperties() || EditorGUI.EndChangeCheck())
@@ -150,7 +158,15 @@ namespace Unity.AutoLOD
             }
         }
 
-        
+        void DrawSlider()
+        {
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.PrefixLabel(Styles.LODGroupSetting);
+            slider.Draw();
+            EditorGUILayout.EndHorizontal();            
+            EditorGUILayout.Space();
+
+        }
         void DrawBatcher()
         {
             if (currentBatcher != null)
@@ -204,7 +220,12 @@ namespace Unity.AutoLOD
             {
                 if (GUILayout.Button(Styles.BuildButton) == true)
                 {
-                    SceneLODCreator.instance.Create(options, currentBatcher);
+                    SceneLODCreator.instance.Create(options, currentBatcher, () =>
+                    {
+                        //redraw this window.
+                        Repaint();
+                        SceneLOD.instance.EnableHLOD();
+                    });
                 }
             }
             EditorGUILayout.Space();

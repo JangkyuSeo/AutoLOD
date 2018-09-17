@@ -29,6 +29,11 @@ namespace Unity.AutoLOD
         
         LODVolume m_RootVolume;
 
+        public void EnableHLOD()
+        {
+            s_HLODEnabled = true;
+        }
+
         void Start()
         {
             Dbg.Log("SceneLOD start");
@@ -112,7 +117,6 @@ namespace Unity.AutoLOD
             GUILayout.EndArea();
             Handles.EndGUI();
         }
-
         
 
 
