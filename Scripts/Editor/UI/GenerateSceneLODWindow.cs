@@ -20,7 +20,7 @@ namespace Unity.AutoLOD
 
             public readonly GUIContent NoBatcherMsg = EditorGUIUtility.TrTextContentWithIcon("No IBatchers found!", MessageType.Error);
 
-            public readonly GUIContent LODGroupCount = EditorGUIUtility.TrTextContent("LODGroup count in level");
+            public readonly GUIContent LODGroupSize = EditorGUIUtility.TrTextContent("LODGroup size");
             public readonly GUIContent LODGroupSetting = EditorGUIUtility.TrTextContent("LODGroup setting");
             public readonly GUIContent BuildButton = EditorGUIUtility.TrTextContent("Build HLOD");
             public readonly GUIContent DestoryButton = EditorGUIUtility.TrTextContent("Destroy HLOD");
@@ -156,7 +156,7 @@ namespace Unity.AutoLOD
             EditorGUI.BeginChangeCheck();
 
             GUI.enabled = rootExists && !SceneLODCreator.instance.IsCreating();
-            options.VolumeSplitCount = EditorGUILayout.IntField(Styles.LODGroupCount, options.VolumeSplitCount);
+            options.VolumeSize = EditorGUILayout.FloatField(Styles.LODGroupSize, options.VolumeSize);
 
             DrawSlider();
             DrawBatcher();

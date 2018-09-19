@@ -21,7 +21,7 @@ namespace Unity.AutoLOD
         {
             private const string k_OptionStr = "AutoLOD.Options.";
 
-            public int VolumeSplitCount;
+            public float VolumeSize;
             public bool VolumeSimplification;
             public float VolumePolygonRatio;
 
@@ -29,7 +29,7 @@ namespace Unity.AutoLOD
 
             public void SaveToEditorPrefs()
             {
-                EditorPrefs.SetInt(k_OptionStr + "VolumeSplitCount", VolumeSplitCount);
+                EditorPrefs.SetFloat(k_OptionStr + "VolumeSize", VolumeSize);
                 EditorPrefs.SetBool(k_OptionStr + "VolumeSimplification", VolumeSimplification);
                 EditorPrefs.SetFloat(k_OptionStr + "VolumePolygonRatio", VolumePolygonRatio);
                 EditorPrefs.SetFloat(k_OptionStr + "LODRange", LODRange);
@@ -37,7 +37,7 @@ namespace Unity.AutoLOD
 
             public void LoadFromEditorPrefs()
             {
-                VolumeSplitCount = EditorPrefs.GetInt(k_OptionStr + "VolumeSplitCount", 32);
+                VolumeSize = EditorPrefs.GetFloat(k_OptionStr + "VolumeSize", 30.0f);
                 VolumeSimplification = EditorPrefs.GetBool(k_OptionStr + "VolumeSimplification", true);
                 VolumePolygonRatio = EditorPrefs.GetFloat(k_OptionStr + "VolumePolygonRatio", 0.5f);
                 LODRange = EditorPrefs.GetFloat(k_OptionStr + "LODRange", 0.3f);
@@ -65,18 +65,15 @@ namespace Unity.AutoLOD
         }
 
         private const string k_HLODRootContainer = "HLODs";
+        private const int k_Splits = 2;
 
         private GameObject m_HLODRootContainer;
         private LODVolume m_RootVolume;
 
 
-        IEnumerator CreateOctree(Options options)
+        List<LODGroup> FindAllLODGroup()
         {
-            m_RootVolume = LODVolume.Create();
-
-            List<LODGroup> lodGroups = new List<LODGroup>();
-            yield return ObjectUtils.FindObjectsOfType(lodGroups);
-
+            var lodGroups = FindObjectsOfType<LODGroup>().ToList();
             int hlodLayerMask = LayerMask.NameToLayer(LODVolume.HLODLayer);
 
             // Remove any lodgroups that should not be there (e.g. HLODs)
@@ -87,18 +84,102 @@ namespace Unity.AutoLOD
                     if (r.gameObject.layer == hlodLayerMask)
                         return true;
 
-                    LOD lastLod = r.GetLODs().Last();
-
-                    if (lastLod.renderers.Length == 0)
+                    LOD lastLOD = r.GetLODs().Last();
+                    if (lastLOD.renderers.Length == 0)
                         return true;
                 }
 
                 return false;
             });
 
-
-            yield return m_RootVolume.SetLODGruops(lodGroups, options.VolumeSplitCount);
+            return lodGroups;
         }
+
+            
+        static Bounds GetCuboidBounds(Bounds bounds)
+        {
+            // Expand bounds side lengths to maintain a cube
+            var maxSize = Mathf.Max(Mathf.Max(bounds.size.x, bounds.size.y), bounds.size.z);
+            var extents = Vector3.one * maxSize * 0.5f;
+            bounds.center = bounds.min + extents;
+            bounds.extents = extents;
+
+            return bounds;
+        }
+        Bounds CalcBounds(List<LODGroup> lodGroups)
+        {
+            Bounds bounds = new Bounds();
+            if ( lodGroups.Count == 0 )
+                return bounds;
+
+            bounds = lodGroups[0].GetBounds();
+            for (int i = 0; i < lodGroups.Count; ++i)
+            {
+                bounds.Encapsulate(lodGroups[i].GetBounds());
+            }
+
+            return GetCuboidBounds(bounds);
+        }
+
+        static bool WithinBounds(LODGroup group, Bounds bounds)
+        {
+            Bounds groupBounds = group.GetBounds();
+            // Use this approach if we are not going to split meshes and simply put the object in one volume or another
+            return Mathf.Approximately(bounds.size.magnitude, 0f) || bounds.Contains(groupBounds.center);
+        }
+
+        IEnumerator CreateOctree(LODVolume targetVolume, Bounds bounds, List<LODGroup> lodGroups, Options options)
+        {
+            targetVolume.Bounds = bounds;
+            targetVolume.LodGroups = lodGroups;
+
+            float boundsSize = Mathf.Max(bounds.extents.x, Mathf.Max(bounds.extents.y, bounds.extents.z));
+            
+            if (lodGroups.Count > 0 && boundsSize > options.VolumeSize)
+            {
+                yield return Split(targetVolume, options);
+            }
+        }
+
+        IEnumerator Split(LODVolume volume, Options options)
+        {
+            var bounds = volume.Bounds;
+            Vector3 size = bounds.size;
+            size.x /= k_Splits;
+            size.y /= k_Splits;
+            size.z /= k_Splits;
+
+            for (int i = 0; i < k_Splits; i++)
+            {
+                for (int j = 0; j < k_Splits; j++)
+                {
+                    for (int k = 0; k < k_Splits; k++)
+                    {
+                        var lodVolume = LODVolume.Create();
+                        var lodVolumeTransform = lodVolume.transform;
+                        lodVolumeTransform.parent = volume.transform;
+                        var center = bounds.min + size * 0.5f + Vector3.Scale(size, new Vector3(i, j, k));
+                        lodVolumeTransform.position = center;
+
+                        lodVolume.Bounds = new Bounds(center, size);
+
+                        List<LODGroup> groups = new List<LODGroup>();
+
+                        foreach (LODGroup group in volume.LodGroups)
+                        {
+                            if (WithinBounds(group, lodVolume.Bounds))
+                            {
+                                groups.Add(group);
+                            }
+                        }
+
+                        volume.AddChild(lodVolume);
+                        yield return CreateOctree(lodVolume, lodVolume.Bounds, groups, options);
+                    }
+                }
+            }
+        }
+
         IEnumerator CreateHLODs(Options options, IBatcher batcher, Action finishAction)
         {
 
@@ -156,7 +237,11 @@ namespace Unity.AutoLOD
 
         IEnumerator CreateCoroutine(Options options, IBatcher batcher)
         {
-            yield return CreateOctree(options);
+            var groups = FindAllLODGroup();
+            var bounds = CalcBounds(groups);
+            m_RootVolume = LODVolume.Create();
+
+            yield return CreateOctree(m_RootVolume, bounds, groups, options);
             yield return CreateHLODs(options, batcher, () =>
             {
                 if (m_RootVolume != null)

@@ -37,6 +37,18 @@ public class LODVolume : MonoBehaviour
 
     public List<LODGroup> LodGroups
     {
+        set
+        {
+            m_LodGroups.Clear();
+
+            if (!this)
+                return;
+
+            if (value.Count == 0)
+                return;
+
+            m_LodGroups = value;
+        }
         get { return m_LodGroups; }
     }
 
@@ -44,6 +56,12 @@ public class LODVolume : MonoBehaviour
     {
         set { m_LodGroup = value;}
         get { return m_LodGroup; }
+    }
+
+    public Bounds Bounds
+    {
+        set { bounds = value; }
+        get { return bounds; }
     }
 
 
@@ -89,164 +107,48 @@ public class LODVolume : MonoBehaviour
         return volume;
     }
 
-    public IEnumerator SetLODGruops(List<LODGroup> lodGroups, int volumeSplitCount)
+    public void AddChild(LODVolume volume)
     {
-        m_LodGroups.Clear();
-
-        if (!this)
-            yield break;
-        
-        if(lodGroups.Count == 0 )
-            yield break;
-
-        m_LodGroups = lodGroups;
-
-        //only root node need it.
-        if (transform.parent == null)
-        {
-            //we need update bounds before split
-            //split need to bounds.
-            UpdateBounds();
-        }
-
-        if (m_LodGroups.Count > volumeSplitCount)
-        {
-            yield return Split(volumeSplitCount);
-        }
+        childVolumes.Add(volume);
     }
 
-    public void UpdateBounds()
-    {
-        if (m_LodGroups.Count == 0)
-            return;
+    //IEnumerator Split(int volumeSplitCount)
+    //{
+    //    Vector3 size = bounds.size;
+    //    size.x /= k_Splits;
+    //    size.y /= k_Splits;
+    //    size.z /= k_Splits;
 
-        bounds = m_LodGroups[0].GetBounds();
+    //    for (int i = 0; i < k_Splits; i++)
+    //    {
+    //        for (int j = 0; j < k_Splits; j++)
+    //        {
+    //            for (int k = 0; k < k_Splits; k++)
+    //            {
+    //                var lodVolume = Create();
+    //                var lodVolumeTransform = lodVolume.transform;
+    //                lodVolumeTransform.parent = transform;
+    //                var center = bounds.min + size * 0.5f + Vector3.Scale(size, new Vector3(i, j, k));
+    //                lodVolumeTransform.position = center;
+    //                lodVolume.bounds = new Bounds(center, size);
 
-        for (int i = 0; i < m_LodGroups.Count; ++i)
-        {
-            var lodBounds = m_LodGroups[i].GetBounds();
-            bounds.Encapsulate(lodBounds);
-        }
+    //                List<LODGroup> groups = new List<LODGroup>();
 
-        bounds = GetCuboidBounds(bounds);
-        transform.position = bounds.center;
+    //                foreach (LODGroup group in m_LodGroups)
+    //                {
+    //                    if (WithinBounds(group, lodVolume.bounds))
+    //                    {
+    //                        groups.Add(group);
+    //                    }
+    //                }
 
-    }
+    //                yield return lodVolume.SetLODGruops(groups, volumeSplitCount);
 
-    IEnumerator Split(int volumeSplitCount)
-    {
-        Vector3 size = bounds.size;
-        size.x /= k_Splits;
-        size.y /= k_Splits;
-        size.z /= k_Splits;
-
-        for (int i = 0; i < k_Splits; i++)
-        {
-            for (int j = 0; j < k_Splits; j++)
-            {
-                for (int k = 0; k < k_Splits; k++)
-                {
-                    var lodVolume = Create();
-                    var lodVolumeTransform = lodVolume.transform;
-                    lodVolumeTransform.parent = transform;
-                    var center = bounds.min + size * 0.5f + Vector3.Scale(size, new Vector3(i, j, k));
-                    lodVolumeTransform.position = center;
-                    lodVolume.bounds = new Bounds(center, size);
-
-                    List<LODGroup> groups = new List<LODGroup>();
-
-                    foreach (LODGroup group in m_LodGroups)
-                    {
-                        if (WithinBounds(group, lodVolume.bounds))
-                        {
-                            groups.Add(group);
-                        }
-                    }
-
-                    yield return lodVolume.SetLODGruops(groups, volumeSplitCount);
-
-                    childVolumes.Add(lodVolume);
-                }
-            }
-        }
-    }
-
-
-    IEnumerator Grow(Bounds targetBounds)
-    {
-        var direction = Vector3.Normalize(targetBounds.center - bounds.center);
-        Vector3 size = bounds.size;
-        size.x *= k_Splits;
-        size.y *= k_Splits;
-        size.z *= k_Splits;
-
-        var corners = new Vector3[]
-        {
-            bounds.min,
-            bounds.min + Vector3.right * bounds.size.x,
-            bounds.min + Vector3.forward * bounds.size.z,
-            bounds.min + Vector3.up * bounds.size.y,
-            bounds.min + Vector3.right * bounds.size.x + Vector3.forward * bounds.size.z,
-            bounds.min + Vector3.right * bounds.size.x + Vector3.up * bounds.size.y,
-            bounds.min + Vector3.forward * bounds.size.x + Vector3.up * bounds.size.y,
-            bounds.min + Vector3.right * bounds.size.x + Vector3.forward * bounds.size.z + Vector3.up * bounds.size.y
-        };
-
-        // Determine where the current volume is situated in the new expanded volume
-        var best = 0f;
-        var expandedVolumeCenter = bounds.min;
-        foreach (var c in corners)
-        {
-            var dot = Vector3.Dot(c, direction);
-            if (dot > best)
-            {
-                best = dot;
-                expandedVolumeCenter = c;
-            }
-            yield return null;
-        }
-
-        var expandedVolume = Create();
-        var expandedVolumeTransform = expandedVolume.transform;
-        expandedVolumeTransform.position = expandedVolumeCenter;
-        expandedVolume.bounds = new Bounds(expandedVolumeCenter, size);
-        expandedVolume.m_LodGroups = new List<LODGroup>(m_LodGroups);
-        var expandedBounds = expandedVolume.bounds;
-
-        transform.parent = expandedVolumeTransform;
-
-        var splitSize = bounds.size;
-        var currentCenter = bounds.center;
-        for (int i = 0; i < k_Splits; i++)
-        {
-            for (int j = 0; j < k_Splits; j++)
-            {
-                for (int k = 0; k < k_Splits; k++)
-                {
-                    var center = expandedBounds.min + splitSize * 0.5f + Vector3.Scale(splitSize, new Vector3(i, j, k));
-                    if (Mathf.Approximately(Vector3.Distance(center, currentCenter), 0f))
-                        continue; // Skip the existing LODVolume we are growing from
-
-                    var lodVolume = Create();
-                    var lodVolumeTransform = lodVolume.transform;
-                    lodVolumeTransform.parent = expandedVolumeTransform;
-                    lodVolumeTransform.position = center;
-                    lodVolume.bounds = new Bounds(center, splitSize);
-                }
-            }
-        }
-    }
-    
-    static Bounds GetCuboidBounds(Bounds bounds)
-    {
-        // Expand bounds side lengths to maintain a cube
-        var maxSize = Mathf.Max(Mathf.Max(bounds.size.x, bounds.size.y), bounds.size.z);
-        var extents = Vector3.one * maxSize * 0.5f;
-        bounds.center = bounds.min + extents;
-        bounds.extents = extents;
-
-        return bounds;
-    }
+    //                childVolumes.Add(lodVolume);
+    //            }
+    //        }
+    //    }
+    //}
 
 #if UNITY_EDITOR
     void OnDrawGizmos()
