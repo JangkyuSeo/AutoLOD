@@ -9,6 +9,7 @@ using Unity.AutoLOD.Utilities;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
+using Object = System.Object;
 
 [RequiresLayer(HLODLayer)]
 public class LODVolume : MonoBehaviour
@@ -16,42 +17,46 @@ public class LODVolume : MonoBehaviour
     public const string HLODLayer = "HLOD";
     public static Type meshSimplifierType { set; get; }
 
-    private bool dirty;
+    [Serializable]
+    public class LODVolumeGroup
+    {
+        [SerializeField]
+        private string m_GroupName;
+        [SerializeField]
+        private GameObject m_HLODObject;
+        [SerializeField]
+        private List<LODGroup> m_LODGroups = new List<LODGroup>();
+
+        public string GroupName
+        {
+            set { m_GroupName = value; }
+            get { return m_GroupName; }
+        }
+
+        public GameObject HLODObject
+        {
+            set { m_HLODObject = value; }
+            get { return m_HLODObject; }
+        }
+
+        public List<LODGroup> LODGroups
+        {
+            set { m_LODGroups = value; }
+            get { return m_LODGroups; }
+        }
+
+    }
 
     [SerializeField]
     private Bounds bounds;
     [SerializeField]
-    private GameObject hlodRoot;
-    [SerializeField]
-    private List<LODGroup> m_LodGroups = new List<LODGroup>();
-    [SerializeField]
     private List<LODVolume> childVolumes = new List<LODVolume>();
+    [SerializeField]
+    private List<LODVolumeGroup> m_VolumeGroups = new List<LODVolumeGroup>();   //< I think dictionary is better. but I used list for showing in inspector.
 
     private LODGroup m_LodGroup;
 
-    public GameObject HLODRoot
-    {
-        set { hlodRoot = value; }
-        get { return hlodRoot; }
-    }
-
-    public List<LODGroup> LodGroups
-    {
-        set
-        {
-            m_LodGroups.Clear();
-
-            if (!this)
-                return;
-
-            if (value.Count == 0)
-                return;
-
-            m_LodGroups = value;
-        }
-        get { return m_LodGroups; }
-    }
-
+    
     public LODGroup LodGroup
     {
         set { m_LodGroup = value;}
@@ -64,16 +69,17 @@ public class LODVolume : MonoBehaviour
         get { return bounds; }
     }
 
+    public List<LODVolumeGroup> VolumeGroups
+    {
+        get { return m_VolumeGroups; }
+    }
+
 
     const HideFlags k_DefaultHideFlags = HideFlags.None;
     const string k_DefaultName = "LODVolumeNode";
 
-    const int k_Splits = 2;
-
     static int s_VolumesCreated;
-
     IMeshSimplifier m_MeshSimplifier;
-
     
 
     static readonly Color[] k_DepthColors = new Color[]
@@ -103,7 +109,8 @@ public class LODVolume : MonoBehaviour
     {
         GameObject go = new GameObject(k_DefaultName + s_VolumesCreated++, typeof(LODVolume));
         go.layer = LayerMask.NameToLayer(HLODLayer);
-        LODVolume volume = go.GetComponent<LODVolume>();
+        LODVolume volume = go.GetComponent<LODVolume>();      
+
         return volume;
     }
 
@@ -112,43 +119,42 @@ public class LODVolume : MonoBehaviour
         childVolumes.Add(volume);
     }
 
-    //IEnumerator Split(int volumeSplitCount)
-    //{
-    //    Vector3 size = bounds.size;
-    //    size.x /= k_Splits;
-    //    size.y /= k_Splits;
-    //    size.z /= k_Splits;
+    public void SetLODGroups(Dictionary<string, List<LODGroup>> groups)
+    {
+        foreach (var pair in groups)
+        {
+            SetLODGroups(pair.Key, pair.Value);
+        }
+    }
 
-    //    for (int i = 0; i < k_Splits; i++)
-    //    {
-    //        for (int j = 0; j < k_Splits; j++)
-    //        {
-    //            for (int k = 0; k < k_Splits; k++)
-    //            {
-    //                var lodVolume = Create();
-    //                var lodVolumeTransform = lodVolume.transform;
-    //                lodVolumeTransform.parent = transform;
-    //                var center = bounds.min + size * 0.5f + Vector3.Scale(size, new Vector3(i, j, k));
-    //                lodVolumeTransform.position = center;
-    //                lodVolume.bounds = new Bounds(center, size);
+    public void SetLODGroups(string groupName, List<LODGroup> groups)
+    {
+        for (int i = 0; i < m_VolumeGroups.Count; ++i)
+        {
+            if (m_VolumeGroups[i].GroupName == groupName)
+            {
+                m_VolumeGroups[i].LODGroups = groups;
+                return;
+            }
+        }
 
-    //                List<LODGroup> groups = new List<LODGroup>();
+        LODVolumeGroup volumeGroup = new LODVolumeGroup();
+        volumeGroup.GroupName = groupName;
+        volumeGroup.LODGroups = groups;
 
-    //                foreach (LODGroup group in m_LodGroups)
-    //                {
-    //                    if (WithinBounds(group, lodVolume.bounds))
-    //                    {
-    //                        groups.Add(group);
-    //                    }
-    //                }
+        m_VolumeGroups.Add(volumeGroup);
+    }
 
-    //                yield return lodVolume.SetLODGruops(groups, volumeSplitCount);
+    public bool Contains(LODGroup group)
+    {
+        foreach (var volumeGroup in m_VolumeGroups)
+        {
+            if (volumeGroup.LODGroups.Contains(group))
+                return true;
+        }
 
-    //                childVolumes.Add(lodVolume);
-    //            }
-    //        }
-    //    }
-    //}
+        return false;
+    }
 
 #if UNITY_EDITOR
     void OnDrawGizmos()
@@ -325,22 +331,25 @@ public class LODVolume : MonoBehaviour
 
         m_LodGroup.SetEnabled(false);
 
-        if (hlodRoot != null)
+        foreach (var volumeGroup in m_VolumeGroups)
         {
-            var meshRenderer = hlodRoot.GetComponent<MeshRenderer>();
-            if (meshRenderer != null)
+            if (volumeGroup.HLODObject != null)
             {
-                meshRenderer.enabled = false;
+                var meshRenderer = volumeGroup.HLODObject.GetComponent<MeshRenderer>();
+                if (meshRenderer != null)
+                {
+                    meshRenderer.enabled = false;
+                }
             }
-        }
-        
-        //if this is leaf, all lodgroups should be turn on.
-        if (childVolumes.Count == 0)
-        {
-            foreach (var group in m_LodGroups)
+
+            //if this is a leaf, all lodgroups should be turned on.
+            if (childVolumes.Count == 0)
             {
-                if ( group != null )
-                    group.SetEnabled(true);
+                foreach (var group in volumeGroup.LODGroups)
+                {
+                    if ( group != null )
+                        group.SetEnabled(true);
+                }
             }
         }
         
@@ -369,9 +378,12 @@ public class LODVolume : MonoBehaviour
 
             if (childVolumes.Count == 0)
             {
-                foreach (var group in m_LodGroups)
+                foreach (var volumeGroup in m_VolumeGroups)
                 {
-                    group.SetEnabled(false);
+                    foreach (var group in volumeGroup.LODGroups)
+                    {
+                        group.SetEnabled(false);
+                    }
                 }
             }
             else
@@ -394,9 +406,12 @@ public class LODVolume : MonoBehaviour
             //leaf node have to used mesh own.
             if (childVolumes.Count == 0)
             {
-                foreach (var group in m_LodGroups)
+                foreach (var volumeGroup in m_VolumeGroups)
                 {
-                    group.SetEnabled(true);
+                    foreach (var group in volumeGroup.LODGroups)
+                    {
+                        group.SetEnabled(true);
+                    }
                 }
             }
             else
@@ -416,9 +431,12 @@ public class LODVolume : MonoBehaviour
             //leaf node have to used mesh own.
             if (childVolumes.Count == 0)
             {
-                foreach (var group in m_LodGroups)
+                foreach (var volumeGroup in m_VolumeGroups)
                 {
-                    group.SetEnabled(false);
+                    foreach (var group in volumeGroup.LODGroups)
+                    {
+                        group.SetEnabled(false);
+                    }
                 }
             }
             else

@@ -246,7 +246,9 @@ namespace Unity.AutoLOD
             {
                 if (GUILayout.Button(Styles.BuildButton) == true)
                 {
-                    SceneLODCreator.instance.Create(options, currentBatcher, () =>
+                    var hlodGroups = HLODGroup.FindAllGroups();
+                    
+                    SceneLODCreator.instance.Create(hlodGroups, options, currentBatcher, () =>
                     {
                         //redraw this window.
                         Repaint();

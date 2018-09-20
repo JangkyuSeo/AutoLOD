@@ -9,6 +9,7 @@ using System.Threading;
 using Unity.AutoLOD.Utilities;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Experimental.PlayerLoop;
 using Mesh = UnityEngine.Mesh;
 using Object = UnityEngine.Object;
 using Dbg = UnityEngine.Debug;
@@ -47,10 +48,10 @@ namespace Unity.AutoLOD
 
         enum CoroutineOrder
         {
-            Main,
-            UpdateMesh,
+            BuildTree,          //< Make octree created with LODVolume.
+            UpdateMesh,            
             Batch,
-            SetLODGroup,
+            UpdateLOD,
             Finish,
         }
         /// <summary>
@@ -68,16 +69,17 @@ namespace Unity.AutoLOD
         private const int k_Splits = 2;
 
         private GameObject m_HLODRootContainer;
+        private Dictionary<string, GameObject> m_GroupHLODRootContainer;
         private LODVolume m_RootVolume;
 
+        private Options m_Options;
 
-        List<LODGroup> FindAllLODGroup()
+        static List<LODGroup> RemoveHLODLayer(List<LODGroup> groups)
         {
-            var lodGroups = FindObjectsOfType<LODGroup>().ToList();
             int hlodLayerMask = LayerMask.NameToLayer(LODVolume.HLODLayer);
 
             // Remove any lodgroups that should not be there (e.g. HLODs)
-            lodGroups.RemoveAll(r =>
+            groups.RemoveAll(r =>
             {
                 if (r)
                 {
@@ -91,6 +93,39 @@ namespace Unity.AutoLOD
 
                 return false;
             });
+
+            return groups;
+        }
+
+        static List<LODGroup> FindAllGroupsInHLODGroup(List<HLODGroup> hlodGroups)
+        {
+            List<LODGroup> lodGroups = new List<LODGroup>();
+
+            foreach (var group in hlodGroups)
+            {
+                lodGroups.AddRange(group.GetComponentsInChildren<LODGroup>());
+            }
+
+            return RemoveHLODLayer(lodGroups);
+        }
+        static Dictionary<string, List<LODGroup>> FindAllGroups(Dictionary<string, List<HLODGroup>> hlodGroups)
+        {
+            Dictionary<string, List<LODGroup>> lodGroups = new Dictionary<string, List<LODGroup>>();
+            List<LODGroup> allGroups = RemoveHLODLayer( FindObjectsOfType<LODGroup>().ToList() );
+
+            foreach (var pair in hlodGroups)
+            {
+                var groups = FindAllGroupsInHLODGroup(pair.Value);
+                lodGroups.Add(pair.Key, groups);
+
+                allGroups.RemoveAll(g => groups.Contains(g));
+            }
+
+            if( lodGroups.ContainsKey("") == false )
+                lodGroups.Add("", new List<LODGroup>());
+
+            //add remain groups to default group.
+            lodGroups[""].AddRange(allGroups);
 
             return lodGroups;
         }
@@ -106,7 +141,7 @@ namespace Unity.AutoLOD
 
             return bounds;
         }
-        Bounds CalcBounds(List<LODGroup> lodGroups)
+        static Bounds CalcBounds(List<LODGroup> lodGroups)
         {
             Bounds bounds = new Bounds();
             if ( lodGroups.Count == 0 )
@@ -128,22 +163,24 @@ namespace Unity.AutoLOD
             return Mathf.Approximately(bounds.size.magnitude, 0f) || bounds.Contains(groupBounds.center);
         }
 
-        IEnumerator CreateOctree(LODVolume targetVolume, Bounds bounds, List<LODGroup> lodGroups, Options options)
-        {
-            targetVolume.Bounds = bounds;
-            targetVolume.LodGroups = lodGroups;
-
-            float boundsSize = Mathf.Max(bounds.extents.x, Mathf.Max(bounds.extents.y, bounds.extents.z));
-            
-            if (lodGroups.Count > 0 && boundsSize > options.VolumeSize)
-            {
-                yield return Split(targetVolume, options);
-            }
-        }
-
-        IEnumerator Split(LODVolume volume, Options options)
+        IEnumerator BuildOctree(LODVolume volume)
         {
             var bounds = volume.Bounds;
+            float boundsSize = Mathf.Max(bounds.extents.x, Mathf.Max(bounds.extents.y, bounds.extents.z));
+
+            yield return BuildHLOD(volume);
+            //reserve logic.
+            //UpdateLODGroup should be run after batch.
+            StartCustomCoroutine(UpdateLODGroup(volume), CoroutineOrder.UpdateLOD);
+
+            //Make a child if necessary.
+            if (boundsSize < m_Options.VolumeSize)
+                yield break;
+
+            //Volume doesn't have any group for a split.
+            if ( volume.VolumeGroups.Count == 0 )
+                yield break;;
+            
             Vector3 size = bounds.size;
             size.x /= k_Splits;
             size.y /= k_Splits;
@@ -163,96 +200,194 @@ namespace Unity.AutoLOD
 
                         lodVolume.Bounds = new Bounds(center, size);
 
-                        List<LODGroup> groups = new List<LODGroup>();
-
-                        foreach (LODGroup group in volume.LodGroups)
+                        foreach(var volumeGroup in volume.VolumeGroups)
                         {
-                            if (WithinBounds(group, lodVolume.Bounds))
+                            List<LODGroup> lodGroups = new List<LODGroup>(volumeGroup.LODGroups.Count);
+
+                            foreach (LODGroup group in volumeGroup.LODGroups)
                             {
-                                groups.Add(group);
+
+                                if (WithinBounds(group, lodVolume.Bounds))
+                                {
+                                    lodGroups.Add(group);
+                                }
+
                             }
+
+                            if (lodGroups.Count > 0)
+                            {
+                                lodVolume.SetLODGroups(volumeGroup.GroupName, lodGroups);
+                            }
+
                         }
 
                         volume.AddChild(lodVolume);
-                        yield return CreateOctree(lodVolume, lodVolume.Bounds, groups, options);
+                        yield return BuildOctree(lodVolume);
                     }
                 }
             }
+
+            
+        }
+        
+        IEnumerator BuildHLOD(LODVolume volume)
+        {
+            foreach (var volumeGroup in volume.VolumeGroups)
+            {
+                string groupName = volumeGroup.GroupName;
+                if (m_GroupHLODRootContainer.ContainsKey(groupName) == false)
+                {
+                    var groupRoot = new GameObject(groupName);
+                    groupRoot.layer = LayerMask.NameToLayer(LODVolume.HLODLayer);
+                    groupRoot.transform.parent = m_HLODRootContainer.transform;
+                    m_GroupHLODRootContainer.Add(groupName, groupRoot);
+                }
+
+                yield return CreateHLODObject(volumeGroup.LODGroups, volume.Bounds, volumeGroup, volume.gameObject.name);
+            }
         }
 
-        IEnumerator CreateHLODs(Options options, IBatcher batcher, Action finishAction)
+        IEnumerator UpdateLODGroup(LODVolume volume)
         {
-
-            var updater = FindObjectOfType<SceneLODUpdater>();
-            if (updater != null)
-                m_HLODRootContainer = updater.gameObject;
-
-            if (!m_HLODRootContainer)
+            List<Renderer> lodRenderers = new List<Renderer>();
+            foreach (var volumeGroup in volume.VolumeGroups)
             {
-                m_HLODRootContainer = new GameObject(k_HLODRootContainer);
-                m_HLODRootContainer.AddComponent<SceneLODUpdater>();
+                if (volumeGroup.HLODObject == null)
+                    continue;
+
+                lodRenderers.AddRange(volumeGroup.HLODObject.GetComponentsInChildren<Renderer>(false));
             }
 
-            //m_HLODRootContainer.SetActive(false);
+            LOD lod = new LOD();
+            LOD detailLOD = new LOD();
 
-            yield return CreateHLODsReculsive(m_RootVolume);
-            yield return UpdateMeshReculsive(options, m_RootVolume);
-            StartCustomCoroutine(batcher.Batch(m_HLODRootContainer), CoroutineOrder.Batch);
-            //StartCustomCoroutine(EnqueueAction(() => { m_HLODRootContainer.SetActive(true); }), 1);
-            StartCustomCoroutine(EnqueueAction(finishAction), CoroutineOrder.Finish);
-        }
+            detailLOD.screenRelativeTransitionHeight = m_Options.LODRange;
+            lod.screenRelativeTransitionHeight = 0.0f;
 
-        IEnumerator EnqueueAction(Action action)
-        {
-            if (action != null)
-                action();
+            var lodGroup = volume.GetComponent<LODGroup>();
+            if (!lodGroup)
+                lodGroup = volume.gameObject.AddComponent<LODGroup>();
 
+            volume.LodGroup = lodGroup;
+
+            lod.renderers = lodRenderers.ToArray();
+            lodGroup.SetLODs(new LOD[] {detailLOD, lod});
             yield break;
         }
 
-        IEnumerator CreateHLODsReculsive(LODVolume volume)
+        IEnumerator CreateHLODObject(List<LODGroup> lodGroups, Bounds volumeBounds, LODVolume.LODVolumeGroup volumeGroup, string volumeName)
         {
-            foreach (Transform child in volume.transform)
+            List<Renderer> hlodRenderers = new List<Renderer>();
+            int depth = GetDepth(volumeBounds);
+
+            foreach (var group in lodGroups)
             {
-                var childLODVolume = child.GetComponent<LODVolume>();
-                if (childLODVolume)
-                    yield return CreateHLODsReculsive(childLODVolume);
+                var lastLod = group.GetLODs().Last();
+                foreach (var lr in lastLod.renderers)
+                {
+
+                    if (lr && lr.GetComponent<MeshFilter>())
+                    {
+                        hlodRenderers.Add(lr);
+                    }
+                }
             }
 
-            yield return GenerateHLODObject(volume);
-        }
+            if (hlodRenderers.Count == 0)
+                yield break;
 
-        IEnumerator UpdateMeshReculsive(Options options, LODVolume volume)
-        {
-            foreach (Transform child in volume.transform)
+            var hlodLayer = LayerMask.NameToLayer(LODVolume.HLODLayer);
+            var hlodRoot = new GameObject("HLOD " + volumeName);
+            hlodRoot.layer = LayerMask.NameToLayer(LODVolume.HLODLayer);
+            hlodRoot.transform.parent = m_GroupHLODRootContainer[volumeGroup.GroupName].transform;
+
+            volumeGroup.HLODObject = hlodRoot;
+
+            var parent = hlodRoot.transform;
+            for (int i = 0; i < hlodRenderers.Count; ++i)
             {
-                var childLODVolume = child.GetComponent<LODVolume>();
-                if (childLODVolume)
-                    yield return UpdateMeshReculsive(options, childLODVolume);
+                var r = hlodRenderers[i];
+                var rendererTransform = r.transform;
+
+                var child = new GameObject(r.name, typeof(MeshFilter), typeof(MeshRenderer));
+                child.layer = hlodLayer;
+                var childTransform = child.transform;
+                childTransform.SetPositionAndRotation(rendererTransform.position, rendererTransform.rotation);
+                childTransform.localScale = rendererTransform.lossyScale;
+                childTransform.SetParent(parent, true);
+
+                var mr = child.GetComponent<MeshRenderer>();
+                var mf = child.GetComponent<MeshFilter>();
+
+                EditorUtility.CopySerialized(r.GetComponent<MeshFilter>(), mf);
+                EditorUtility.CopySerialized(r.GetComponent<MeshRenderer>(), mr);
+
+                //This will be used many time.
+                //so, start new coroutine and make it more efficient.
+                StartCustomCoroutine(UpdateMesh(child, depth), CoroutineOrder.UpdateMesh);
             }
 
-            StartCustomCoroutine(UpdateMesh(options, volume), CoroutineOrder.UpdateMesh);
-            StartCustomCoroutine(UpdateLODGroup(options, volume), CoroutineOrder.SetLODGroup);
+            
+
         }
 
-        IEnumerator CreateCoroutine(Options options, IBatcher batcher)
+        IEnumerator UpdateMesh(GameObject gameObject, int depth)
         {
-            var groups = FindAllLODGroup();
-            var bounds = CalcBounds(groups);
-            m_RootVolume = LODVolume.Create();
+            var r = gameObject.GetComponent<Renderer>();
+            var mf = gameObject.GetComponent<MeshFilter>();
+            if (r == null || mf == null)
+                yield break;
 
-            yield return CreateOctree(m_RootVolume, bounds, groups, options);
-            yield return CreateHLODs(options, batcher, () =>
+            yield return GetLODMesh(r, depth, (mesh) =>
             {
-                if (m_RootVolume != null)
-                    m_RootVolume.ResetLODGroup();
+                mf.sharedMesh = mesh;
             });
         }
 
-        public void Create(Options options, IBatcher batcher, Action finishAction)
+
+        IEnumerator BuildBatch(IBatcher batcher)
         {
-            StartCustomCoroutine(CreateCoroutine(options, batcher),CoroutineOrder.Main);
+            foreach (var groupRoot in m_GroupHLODRootContainer.Values)
+            {
+                yield return batcher.Batch(groupRoot);
+            }
+        }
+
+        public void Create(Dictionary<string, List<HLODGroup>> groups, Options options, IBatcher batcher, Action finishAction)
+        {
+            m_Options = options;
+
+            var lodGroups = FindAllGroups(groups);
+            if (lodGroups.Count == 0)
+                return;
+
+            //find biggest bounds including all groups.
+            var lodGroupList = lodGroups.Values.ToList();
+            Bounds bounds = CalcBounds(lodGroupList[0]);
+
+            for (int i = 1; i < lodGroupList.Count; ++i)
+            {
+                bounds.Encapsulate(CalcBounds(lodGroupList[i]));
+            }
+
+            m_RootVolume = LODVolume.Create();
+            m_RootVolume.SetLODGroups(lodGroups);
+            m_RootVolume.Bounds = bounds;
+
+            m_HLODRootContainer = new GameObject(k_HLODRootContainer);
+            m_HLODRootContainer.AddComponent<SceneLODUpdater>();
+
+            m_GroupHLODRootContainer = new Dictionary<string, GameObject>();
+
+            StartCustomCoroutine(BuildOctree(m_RootVolume), CoroutineOrder.BuildTree);
+            StartCustomCoroutine(BuildBatch(batcher), CoroutineOrder.Batch);
+
             StartCustomCoroutine(EnqueueAction(finishAction), CoroutineOrder.Finish);
+            StartCustomCoroutine(EnqueueAction(() =>
+            {
+                if ( m_RootVolume != null )
+                    m_RootVolume.ResetLODGroup();
+            }), CoroutineOrder.Finish);
         }
 
         public bool IsCreating()
@@ -271,19 +406,6 @@ namespace Unity.AutoLOD
         {
             m_JobContainer.Clear();
             EditorApplication.update += EditorUpdate;
-
-            var updater = FindObjectOfType<SceneLODUpdater>();
-            if (updater != null)
-                m_HLODRootContainer = updater.gameObject;
-            else
-                m_HLODRootContainer = null;
-
-            m_RootVolume = FindObjectOfType<LODVolume>();
-            while (m_RootVolume != null && m_RootVolume.transform.parent != null)
-            {
-                var parent = m_RootVolume.transform.parent;
-                m_RootVolume = parent.GetComponent<LODVolume>();
-            }
         }
 
        
@@ -365,151 +487,7 @@ namespace Unity.AutoLOD
             }
         }
 
-        IEnumerator GenerateHLODObject(LODVolume volume)
-        {
-            List<Renderer> hlodRenderers = new List<Renderer>();
-            List<int> hlodRendererDepths = new List<int>();
-
-            foreach (var group in volume.LodGroups)
-            {
-                var lastLod = group.GetLODs().Last();
-                int depth = GetDepth(volume, group);
-                foreach (var lr in lastLod.renderers)
-                {
-
-                    if (lr && lr.GetComponent<MeshFilter>())
-                    {
-                        hlodRenderers.Add(lr);
-                        hlodRendererDepths.Add(depth);
-                    }
-                }
-            }
-
-            CleanupHLOD(volume);
-
-            if (hlodRenderers.Count == 0)
-                yield break;
-
-            var hlodLayer = LayerMask.NameToLayer(LODVolume.HLODLayer);
-            var hlodRoot = new GameObject("HLOD " + volume.gameObject.name);
-            hlodRoot.layer = LayerMask.NameToLayer(LODVolume.HLODLayer);
-            hlodRoot.transform.parent = m_HLODRootContainer.transform;
-
-            volume.HLODRoot = hlodRoot;
-
-            var parent = hlodRoot.transform;
-            for(int i = 0; i < hlodRenderers.Count; ++i)
-            {
-                var r = hlodRenderers[i];
-                var rendererTransform = r.transform;
-
-                var child = new GameObject(r.name, typeof(MeshFilter), typeof(MeshRenderer), typeof(DepthHolder));
-                child.layer = hlodLayer;
-                var childTransform = child.transform;
-                childTransform.SetPositionAndRotation(rendererTransform.position, rendererTransform.rotation);
-                childTransform.localScale = rendererTransform.lossyScale;
-                childTransform.SetParent(parent, true);
-
-                var mr = child.GetComponent<MeshRenderer>();
-                var mf = child.GetComponent<MeshFilter>();
-                var dh = child.GetComponent<DepthHolder>();
-
-                EditorUtility.CopySerialized(r.GetComponent<MeshFilter>(), mf);
-                EditorUtility.CopySerialized(r.GetComponent<MeshRenderer>(), mr);
-                dh.Depth = hlodRendererDepths[i];
-            }
-
-
-        }
-
-        IEnumerator UpdateMesh(Options options, LODVolume volume)
-        {
-            if ( volume.HLODRoot == null )
-                yield break;
-
-            foreach (Transform child in volume.HLODRoot.transform)
-            {
-                var r = child.GetComponent<Renderer>();
-                var mf = child.GetComponent<MeshFilter>();
-                var dh = child.GetComponent<DepthHolder>();
-                if ( r == null || mf == null|| dh == null)
-                    continue;
-
-                yield return GetLODMesh(options, r, dh.Depth, (mesh) =>
-                {
-                    mf.sharedMesh = mesh;
-                });
-            }
-        }
-
-        IEnumerator UpdateLODGroup(Options options, LODVolume volume)
-        {
-            if ( volume.HLODRoot == null )
-                yield break;
-            
-            LOD lod = new LOD();
-            LOD detailLOD = new LOD();
-
-            detailLOD.screenRelativeTransitionHeight = options.LODRange;
-            lod.screenRelativeTransitionHeight = 0.0f;
-
-            var lodGroup = volume.GetComponent<LODGroup>();
-            if (!lodGroup)
-                lodGroup = volume.gameObject.AddComponent<LODGroup>();
-
-            volume.LodGroup = lodGroup;
-
-            lod.renderers = volume.HLODRoot.GetComponentsInChildren<Renderer>(false);
-            lodGroup.SetLODs(new LOD[] { detailLOD, lod });
-        }
-
-        
-        void CleanupHLOD(LODVolume volume)
-        {
-            var root = volume.HLODRoot;
-            if (root) // Clean up old HLOD
-            {
-                var mf = root.GetComponent<MeshFilter>();
-                if (mf)
-                    Object.DestroyImmediate(mf.sharedMesh, true); // Clean up file on disk
-
-                Object.DestroyImmediate(root);
-
-                volume.HLODRoot = null;
-            }
-        }
-
-        /// <summary>
-        /// Return depth from leaf by LODGroup.
-        /// </summary>
-        int GetDepth(LODVolume currentVolume, LODGroup group)
-        {
-            if (currentVolume.transform.childCount > 0)
-            {
-                foreach (Transform child in currentVolume.transform)
-                {
-                    var childVolume = child.GetComponent<LODVolume>();
-                    if (childVolume != null && childVolume.LodGroups.Contains(group))
-                    {
-                        return GetDepth(childVolume, group) + 1;
-                    }
-                }
-            }
-            else
-            {
-                //current volume is leaf node.
-                //depth of leaf node is always 0.
-                //LODGroup must be in LODVolue.
-                return 0;
-            }
-
-            //This is weird situation.
-            //LODGroup must be in LODVolume.
-            Debug.LogError("LODGroup is not in LODVolume.\n\tLODGroup : " + group.name + "\n\tLODVolume : " + currentVolume.name);
-            return -1;
-        }
-
-        IEnumerator GetLODMesh(Options options, Renderer renderer, int depth, Action<Mesh> returnCallback)
+        IEnumerator GetLODMesh(Renderer renderer, int depth, Action<Mesh> returnCallback)
         {
             var mf = renderer.GetComponent<MeshFilter>();
             if (mf == null || mf.sharedMesh == null)
@@ -519,7 +497,7 @@ namespace Unity.AutoLOD
 
             var mesh = mf.sharedMesh;
 
-            if (options.VolumeSimplification == false)
+            if (m_Options.VolumeSimplification == false)
             {
                 if (returnCallback != null)
                     returnCallback(mesh);
@@ -552,14 +530,14 @@ namespace Unity.AutoLOD
                 //make simplification mesh by default mesh.
                 if (meshes[0] != null)
                 {
-                    float quality = Mathf.Pow(options.VolumePolygonRatio, depth + 1);
+                    float quality = Mathf.Pow(m_Options.VolumePolygonRatio, depth + 1);
                     int expectTriangleCount = (int) (quality * meshes[0].triangles.Length);
 
                     //It need for avoid crash when simplificate in Simplygon
                     //Mesh has less vertices, it crashed when save prefab.
                     if (expectTriangleCount < 10)
                     {
-                        yield return GetLODMesh(options, renderer, depth -1, returnCallback);
+                        yield return GetLODMesh(renderer, depth -1, returnCallback);
                         yield break;
                     }
 
@@ -594,6 +572,34 @@ namespace Unity.AutoLOD
             }
         }
 
+
+        /// <summary>
+        /// Make IEnumerator with action for using coroutine.
+        /// </summary>
+        /// <param name="action"></param>
+        /// <returns></returns>
+        IEnumerator EnqueueAction(Action action)
+        {
+            if (action != null)
+                action();
+
+            yield break;
+        }
+
+        int GetDepth(Bounds bounds)
+        {
+            float size = Mathf.Max(bounds.extents.x, Mathf.Max(bounds.extents.y, bounds.extents.z));
+            int depth = 0;
+
+            if (size > m_Options.VolumeSize)
+            {
+                depth += 1;
+                size /= 2.0f;
+            }
+
+            return depth;
+
+        }
 
         class Job
         {
