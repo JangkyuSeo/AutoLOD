@@ -31,6 +31,9 @@ namespace Unity.AutoLOD
                 allGroups[group.GroupName].Add(group);
             }
 
+            if ( allGroups.ContainsKey("") == false )
+                allGroups.Add("", new List<HLODGroup>());
+
             return allGroups;
         }
 
