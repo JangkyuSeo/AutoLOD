@@ -176,6 +176,7 @@ namespace Unity.AutoLOD
                         if (m_RangeList[m_SelectedIndex].Property != null)
                         {
                             m_RangeList[m_SelectedIndex].Property.floatValue = percentage;
+                            GUI.changed = true;
                         }
                     }
                     break;

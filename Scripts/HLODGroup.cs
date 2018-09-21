@@ -34,7 +34,8 @@ namespace Unity.AutoLOD
             if ( allGroups.ContainsKey("") == false )
                 allGroups.Add("", new List<HLODGroup>());
 
-            return allGroups;
+            //sort by key
+            return allGroups.OrderBy(key => key.Key).ToDictionary(keyItem=>keyItem.Key, valueItem=>valueItem.Value);
         }
 
 #endif

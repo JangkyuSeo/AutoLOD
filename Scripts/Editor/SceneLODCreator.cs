@@ -18,32 +18,75 @@ namespace Unity.AutoLOD
 {
     public class SceneLODCreator : ScriptableSingleton<SceneLODCreator>
     {
+        private const string k_OptionStr = "AutoLOD.Options.";
+
         public class Options : ScriptableObject
         {
-            private const string k_OptionStr = "AutoLOD.Options.";
+            public float VolumeSize = 30.0f;
+            public float LODRange = 0.3f;
 
-            public float VolumeSize;
-            public bool VolumeSimplification;
-            public float VolumePolygonRatio;
-
-            public float LODRange;
+            public Dictionary<string, GroupOptions> GroupOptions = new Dictionary<string, GroupOptions>();
 
             public void SaveToEditorPrefs()
             {
                 EditorPrefs.SetFloat(k_OptionStr + "VolumeSize", VolumeSize);
-                EditorPrefs.SetBool(k_OptionStr + "VolumeSimplification", VolumeSimplification);
-                EditorPrefs.SetFloat(k_OptionStr + "VolumePolygonRatio", VolumePolygonRatio);
                 EditorPrefs.SetFloat(k_OptionStr + "LODRange", LODRange);
+
+                foreach (var group in GroupOptions.Values)
+                {
+                    group.SaveToEditorPrefs();
+                }
             }
 
             public void LoadFromEditorPrefs()
             {
                 VolumeSize = EditorPrefs.GetFloat(k_OptionStr + "VolumeSize", 30.0f);
-                VolumeSimplification = EditorPrefs.GetBool(k_OptionStr + "VolumeSimplification", true);
-                VolumePolygonRatio = EditorPrefs.GetFloat(k_OptionStr + "VolumePolygonRatio", 0.5f);
                 LODRange = EditorPrefs.GetFloat(k_OptionStr + "LODRange", 0.3f);
+
+                GroupOptions.Clear();
+                var groupNames = HLODGroup.FindAllGroups().Keys.ToList();
+                foreach (var name in groupNames)
+                {
+                    GroupOptions group = new GroupOptions(name);
+                    group.LoadFromEditorPrefs();
+                    GroupOptions.Add(name, group);
+                }
+            }
+        }
+
+
+        public class GroupOptions
+        {
+            public bool VolumeSimplification = true;
+            public float VolumePolygonRatio = 0.5f;
+
+            public Type BatcherType;
+            public IBatcher Batcher;
+
+            private string groupName;
+
+            public GroupOptions(string name)
+            {
+                groupName = name;
             }
 
+            public void SaveToEditorPrefs()
+            {
+                EditorPrefs.SetBool(k_OptionStr + groupName + ".VolumeSimplification", VolumeSimplification);
+                EditorPrefs.SetFloat(k_OptionStr + groupName + ".VolumePolygonRatio", VolumePolygonRatio);
+                if ( BatcherType != null)
+                    EditorPrefs.SetString(k_OptionStr + groupName + ".BatcherType", BatcherType.AssemblyQualifiedName);
+                
+            }
+
+            public void LoadFromEditorPrefs()
+            {
+                VolumeSimplification = EditorPrefs.GetBool(k_OptionStr + groupName + ".VolumeSimplification", true);
+                VolumePolygonRatio = EditorPrefs.GetFloat(k_OptionStr + groupName + ".VolumePolygonRatio", 0.5f);
+                string batcherTypeStr = EditorPrefs.GetString(k_OptionStr + groupName + ".BatcherType");
+                BatcherType = Type.GetType(batcherTypeStr);
+                Batcher = (IBatcher) Activator.CreateInstance(BatcherType);
+            }
         }
 
         enum CoroutineOrder
@@ -73,6 +116,15 @@ namespace Unity.AutoLOD
         private LODVolume m_RootVolume;
 
         private Options m_Options;
+
+        public Options GetOptions()
+        {
+            if ( m_Options == null )
+                m_Options = Options.CreateInstance<Options>();
+
+            return m_Options;
+        }
+
 
         static List<LODGroup> RemoveHLODLayer(List<LODGroup> groups)
         {
@@ -324,39 +376,40 @@ namespace Unity.AutoLOD
 
                 //This will be used many time.
                 //so, start new coroutine and make it more efficient.
-                StartCustomCoroutine(UpdateMesh(child, depth), CoroutineOrder.UpdateMesh);
+                StartCustomCoroutine(UpdateMesh(volumeGroup.GroupName, child, depth), CoroutineOrder.UpdateMesh);
             }
 
             
 
         }
 
-        IEnumerator UpdateMesh(GameObject gameObject, int depth)
+        IEnumerator UpdateMesh(string groupName, GameObject gameObject, int depth)
         {
             var r = gameObject.GetComponent<Renderer>();
             var mf = gameObject.GetComponent<MeshFilter>();
             if (r == null || mf == null)
                 yield break;
 
-            yield return GetLODMesh(r, depth, (mesh) =>
+            yield return GetLODMesh(groupName, r, depth, (mesh) =>
             {
                 mf.sharedMesh = mesh;
             });
         }
 
 
-        IEnumerator BuildBatch(IBatcher batcher)
+        IEnumerator BuildBatch()
         {
-            foreach (var groupRoot in m_GroupHLODRootContainer.Values)
+            foreach (var pair in m_GroupHLODRootContainer)
             {
-                yield return batcher.Batch(groupRoot);
+                var groupOptions = m_Options.GroupOptions[pair.Key];
+                if (groupOptions.Batcher == null)
+                    yield break;
+                yield return groupOptions.Batcher.Batch(pair.Value);
             }
         }
 
-        public void Create(Dictionary<string, List<HLODGroup>> groups, Options options, IBatcher batcher, Action finishAction)
+        public void Create(Dictionary<string, List<HLODGroup>> groups, Action finishAction)
         {
-            m_Options = options;
-
             var lodGroups = FindAllGroups(groups);
             if (lodGroups.Count == 0)
                 return;
@@ -380,7 +433,7 @@ namespace Unity.AutoLOD
             m_GroupHLODRootContainer = new Dictionary<string, GameObject>();
 
             StartCustomCoroutine(BuildOctree(m_RootVolume), CoroutineOrder.BuildTree);
-            StartCustomCoroutine(BuildBatch(batcher), CoroutineOrder.Batch);
+            StartCustomCoroutine(BuildBatch(), CoroutineOrder.Batch);
 
             StartCustomCoroutine(EnqueueAction(finishAction), CoroutineOrder.Finish);
             StartCustomCoroutine(EnqueueAction(() =>
@@ -487,8 +540,9 @@ namespace Unity.AutoLOD
             }
         }
 
-        IEnumerator GetLODMesh(Renderer renderer, int depth, Action<Mesh> returnCallback)
+        IEnumerator GetLODMesh(string groupName, Renderer renderer, int depth, Action<Mesh> returnCallback)
         {
+            var groupOptions = m_Options.GroupOptions[groupName];
             var mf = renderer.GetComponent<MeshFilter>();
             if (mf == null || mf.sharedMesh == null)
             {
@@ -497,7 +551,7 @@ namespace Unity.AutoLOD
 
             var mesh = mf.sharedMesh;
 
-            if (m_Options.VolumeSimplification == false)
+            if (groupOptions.VolumeSimplification == false)
             {
                 if (returnCallback != null)
                     returnCallback(mesh);
@@ -530,14 +584,14 @@ namespace Unity.AutoLOD
                 //make simplification mesh by default mesh.
                 if (meshes[0] != null)
                 {
-                    float quality = Mathf.Pow(m_Options.VolumePolygonRatio, depth + 1);
+                    float quality = Mathf.Pow(groupOptions.VolumePolygonRatio, depth + 1);
                     int expectTriangleCount = (int) (quality * meshes[0].triangles.Length);
 
                     //It need for avoid crash when simplificate in Simplygon
                     //Mesh has less vertices, it crashed when save prefab.
                     if (expectTriangleCount < 10)
                     {
-                        yield return GetLODMesh(renderer, depth -1, returnCallback);
+                        yield return GetLODMesh(groupName, renderer, depth -1, returnCallback);
                         yield break;
                     }
 

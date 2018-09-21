@@ -47,7 +47,23 @@ namespace Unity.AutoLOD
             {
                 if ( m.mainTexture != null)
                     return m.mainTexture as Texture2D;
-                
+
+                string[] check =
+                {
+                    "_Albedo",
+                    "_AlbedoAlpha"
+                };
+                string[] names = m.GetTexturePropertyNames();
+
+                IEnumerable<string> findNames = names.Where(n => check.Any(c => c == n));
+
+                if (findNames.Any())
+                {
+                    var texture = m.GetTexture(findNames.First());
+                    return texture as Texture2D;
+                }
+
+
             }
 
             return null;

@@ -102,7 +102,6 @@ namespace Unity.AutoLOD
         {
             m_GroupName = serializedObject.FindProperty("m_GroupName");
             m_AllGroupNames = HLODGroup.FindAllGroups().Keys.ToList();
-            m_AllGroupNames.Sort();
             m_PopupContent = new HLODGroupPopupContent(m_AllGroupNames);
             m_PopupContent.SelectGroupName = m_GroupName.stringValue;
         }
