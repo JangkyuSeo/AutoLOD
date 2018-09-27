@@ -38,8 +38,13 @@ namespace Unity.AutoLOD
         }
 
         Texture2D m_WhiteTexture;
-        private SimpleBatcherOption option = new SimpleBatcherOption();
+        private SimpleBatcherOption option = null;
         private TexturePacker packer = new TexturePacker();
+
+        public SimpleBatcher(string groupName)
+        {
+            option = new SimpleBatcherOption(groupName);
+        }
 
         Texture2D GetTexture(Material m)
         {
@@ -254,9 +259,12 @@ namespace Unity.AutoLOD
 
     class SimpleBatcherOption : IBatcherOption
     {
-        const string k_PackTextureSelect = "AutoLOD.SimpleBatch.PackTextureSelect";
-        const string k_LimitTextureSelect = "AutoLOD.SimpleBatch.LimitTextureSelect";
-        const string k_MaterialGUID = "AutoLOD.SimpleBatch.MaterialGUID";
+        const string k_SimpleBatcher = "AutoLOD.SimpleBatch.";
+        const string k_PackTextureSelect = ".PackTextureSelect";
+        const string k_LimitTextureSelect = ".LimitTextureSelect";
+        const string k_MaterialGUID = ".MaterialGUID";
+        
+        
         class GUIStyles
         {
             public readonly string[] PackTextureSizeContents =
@@ -298,6 +306,8 @@ namespace Unity.AutoLOD
             }
         }
 
+        private string groupName;
+
         private int packTextureSelect = 3;  //< default size is 1024
         private int limitTextureSelect = 2; //< default size is 128
 
@@ -326,17 +336,19 @@ namespace Unity.AutoLOD
             get { return batchMaterial; }
         }
 
-        public SimpleBatcherOption()
+        public SimpleBatcherOption(string groupName)
         {
-            if (EditorPrefs.HasKey(k_PackTextureSelect))
-                packTextureSelect = EditorPrefs.GetInt(k_PackTextureSelect, 3);
-            if (EditorPrefs.HasKey(k_LimitTextureSelect))
-                limitTextureSelect = EditorPrefs.GetInt(k_LimitTextureSelect, 2);
-            if (EditorPrefs.HasKey(k_MaterialGUID))
+            this.groupName = groupName;
+            
+            if (EditorPrefs.HasKey(GetKey(k_PackTextureSelect)))
+                packTextureSelect = EditorPrefs.GetInt(GetKey(k_PackTextureSelect), 3);
+            if (EditorPrefs.HasKey(GetKey(k_LimitTextureSelect)))
+                limitTextureSelect = EditorPrefs.GetInt(GetKey(k_LimitTextureSelect), 2);
+            if (EditorPrefs.HasKey(GetKey(k_MaterialGUID)))
             {
                 do
                 {
-                    string guid = EditorPrefs.GetString(k_MaterialGUID, null);
+                    string guid = EditorPrefs.GetString(GetKey(k_MaterialGUID), null);
                     if (string.IsNullOrEmpty(guid))
                         break;
 
@@ -354,14 +366,14 @@ namespace Unity.AutoLOD
             packTextureSelect = EditorGUILayout.Popup(Styles.PackTextureSize, packTextureSelect, Styles.PackTextureSizeContents);
             if (EditorGUI.EndChangeCheck())
             {
-                EditorPrefs.SetInt(k_PackTextureSelect, packTextureSelect);
+                EditorPrefs.SetInt(GetKey(k_PackTextureSelect), packTextureSelect);
             }
 
             EditorGUI.BeginChangeCheck();
             limitTextureSelect = EditorGUILayout.Popup(Styles.LimitTextureSize, limitTextureSelect, Styles.LimitTextureSizeContents);
             if (EditorGUI.EndChangeCheck())
             {
-                EditorPrefs.SetInt(k_LimitTextureSelect, limitTextureSelect);
+                EditorPrefs.SetInt(GetKey(k_LimitTextureSelect), limitTextureSelect);
             }
 
             EditorGUI.BeginChangeCheck();
@@ -374,14 +386,20 @@ namespace Unity.AutoLOD
 
                 if (string.IsNullOrEmpty(assetPath))
                 {
-                    EditorPrefs.DeleteKey(k_MaterialGUID);
+                    EditorPrefs.DeleteKey(GetKey(k_MaterialGUID));
                 }
                 else
                 {
                     string guid = AssetDatabase.AssetPathToGUID(assetPath);
-                    EditorPrefs.SetString(k_MaterialGUID, guid);
+                    EditorPrefs.SetString(GetKey(k_MaterialGUID), guid);
                 }
             }
         }
+
+        private string GetKey(string key)
+        {
+            return k_SimpleBatcher + groupName + key;
+        }
+        
     }
 }

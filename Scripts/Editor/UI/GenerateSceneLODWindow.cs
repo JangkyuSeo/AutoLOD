@@ -92,6 +92,12 @@ namespace Unity.AutoLOD
 
         void OnGUI()
         {
+            if ( serializedObject.targetObject == null)
+            { 
+                Initialize(); 
+            }
+            serializedObject.Update();
+            
             if (SceneLOD.instance.RootVolume != null)
             {
                 GUI.enabled = false;
@@ -109,7 +115,7 @@ namespace Unity.AutoLOD
 
         void DrawGenerate(bool rootExists)
         {
-            serializedObject.Update();
+           
 
             //if (currentBatcher == null)
             //{
@@ -166,7 +172,7 @@ namespace Unity.AutoLOD
                 {
                     EditorGUI.indentLevel += 1;
 
-                    DrawBatcher(pair.Value);
+                    DrawBatcher(groupName, pair.Value);
                     DrawSimplification(pair.Value);
 
                     EditorGUI.indentLevel -= 1;
@@ -185,14 +191,14 @@ namespace Unity.AutoLOD
             EditorGUILayout.Space();
 
         }
-        void DrawBatcher(SceneLODCreator.GroupOptions groupOptions)
+        void DrawBatcher(string groupName, SceneLODCreator.GroupOptions groupOptions)
         {
             if (groupOptions.BatcherType == null)
             {
                 if (batcherTypes.Length > 0)
                 {
                     groupOptions.BatcherType = batcherTypes[0];
-                    groupOptions.Batcher = (IBatcher) Activator.CreateInstance(groupOptions.BatcherType);
+                    groupOptions.Batcher = (IBatcher) Activator.CreateInstance(groupOptions.BatcherType, groupName);
                     GUI.changed = true; //< for store value.
                 }
             }
@@ -203,7 +209,7 @@ namespace Unity.AutoLOD
                 if (batcherIndex != newIndex)
                 {
                     groupOptions.BatcherType = batcherTypes[newIndex];
-                    groupOptions.Batcher = (IBatcher) Activator.CreateInstance(groupOptions.BatcherType);
+                    groupOptions.Batcher = (IBatcher) Activator.CreateInstance(groupOptions.BatcherType, groupName);
                     //we don't need GUI.changed here. 
                     //Already set a value when popup index was changed.
                 }

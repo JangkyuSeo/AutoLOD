@@ -8,6 +8,10 @@ namespace Unity.AutoLOD
     /// </summary>
     class MaterialPreservingBatcher : IBatcher
     {
+        public MaterialPreservingBatcher(string groupName)
+        {
+            
+        }
         public IEnumerator Batch(GameObject hlodRoot)
         {
             foreach (Transform child in hlodRoot.transform)

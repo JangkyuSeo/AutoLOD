@@ -85,7 +85,7 @@ namespace Unity.AutoLOD
                 VolumePolygonRatio = EditorPrefs.GetFloat(k_OptionStr + groupName + ".VolumePolygonRatio", 0.5f);
                 string batcherTypeStr = EditorPrefs.GetString(k_OptionStr + groupName + ".BatcherType");
                 BatcherType = Type.GetType(batcherTypeStr);
-                Batcher = (IBatcher) Activator.CreateInstance(BatcherType);
+                Batcher = (IBatcher) Activator.CreateInstance(BatcherType, groupName);
             }
         }
 
