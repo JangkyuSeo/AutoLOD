@@ -5,7 +5,6 @@ using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 namespace Unity.AutoLOD
 {
@@ -279,14 +278,11 @@ namespace Unity.AutoLOD
 
         static Texture2D SaveTexture(Texture2D texture, string name)
         {
-            var path = GetAtlasesDirectory() + name;            
+            var path = SceneLOD.GetSceneLODPath() + name;            
             path = Path.ChangeExtension(path, "PNG");
-            
-            //remove first assets/
-            path = path.Substring(path.IndexOf(Path.DirectorySeparatorChar) + 1);                       
 
-            var assetPath = "Assets/" + path;
-            var dataPath = Application.dataPath + "/" + path;
+            var assetPath = "Assets" + Path.DirectorySeparatorChar + path;
+            var dataPath = Application.dataPath + Path.DirectorySeparatorChar + path;
             
             var dirPath = Path.GetDirectoryName(dataPath);
             if (Directory.Exists(dirPath) == false)
@@ -300,25 +296,7 @@ namespace Unity.AutoLOD
 
             AssetDatabase.ImportAsset(assetPath);
             return AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
-
-
         }
-
-
-        static string GetAtlasesDirectory()
-        {
-            var scene = SceneManager.GetActiveScene();
-
-            var path = Path.GetDirectoryName(scene.path);
-  
-            path = path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
-            path = path + Path.DirectorySeparatorChar + scene.name
-                   + Path.DirectorySeparatorChar + "Atlases" + Path.DirectorySeparatorChar;
-
-            return path;
-
-        }
-
        
     }
 

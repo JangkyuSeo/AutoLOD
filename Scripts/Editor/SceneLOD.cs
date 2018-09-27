@@ -36,6 +36,22 @@ namespace Unity.AutoLOD
         {
             s_HLODEnabled = true;
         }
+        
+        public static string GetSceneLODPath()
+        {
+            var scene = SceneManager.GetActiveScene();
+
+            var path = Path.GetDirectoryName(scene.path);
+  
+            path = path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            path = path + Path.DirectorySeparatorChar + scene.name
+                   + Path.DirectorySeparatorChar + "SceneLOD" + Path.DirectorySeparatorChar;
+
+            //remove first assets/
+            path = path.Substring(path.IndexOf(Path.DirectorySeparatorChar) + 1);
+            
+            return path;   
+        }
 
         void Start()
         {

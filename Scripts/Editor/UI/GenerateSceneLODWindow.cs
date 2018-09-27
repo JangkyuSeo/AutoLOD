@@ -259,13 +259,7 @@ namespace Unity.AutoLOD
             {
                 if (GUILayout.Button(Styles.DestoryButton) == true)
                 {
-                    if (SceneLOD.instance.RootVolume != null)
-                        SceneLOD.instance.RootVolume.ResetLODGroup();
-
-                    MonoBehaviourHelper.StartCoroutine(ObjectUtils.FindGameObject("HLODs",
-                        root => { DestroyImmediate(root); }));
-                    DestroyImmediate(SceneLOD.instance.RootVolume.gameObject);
-
+                    SceneLODCreator.instance.Destroy();
                 }
             }
             else
