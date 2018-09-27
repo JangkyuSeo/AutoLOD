@@ -47,7 +47,7 @@ namespace Unity.AutoLOD
             m_IsWorking = false;
             foreach (var worker in m_Workers)
             {
-                worker.CancelAsync();
+                worker.Dispose();
             }
 
             EditorApplication.update -= EditorUpdate;
@@ -60,6 +60,8 @@ namespace Unity.AutoLOD
         public void Cancel()
         {
             m_SimplificationActions.Clear();
+            OnDisable();
+            OnEnable();
         }
 
         private void Worker_DoWork(object sender, DoWorkEventArgs e)

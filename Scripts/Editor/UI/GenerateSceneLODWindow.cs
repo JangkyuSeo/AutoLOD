@@ -13,14 +13,12 @@ namespace Unity.AutoLOD
 {
     public class GenerateSceneLODWindow : EditorWindow
     {
-        const string k_DefaultBatcher = "AutoLOD.DefaultBatcher";
-
         class GUIStyles
         {
 
             public readonly GUIContent NoBatcherMsg = EditorGUIUtility.TrTextContentWithIcon("No IBatchers found!", MessageType.Error);
 
-            public readonly GUIContent LODGroupCount = EditorGUIUtility.TrTextContent("LODGroup count in level");
+            public readonly GUIContent LODGroupSize = EditorGUIUtility.TrTextContent("LODGroup size");
             public readonly GUIContent LODGroupSetting = EditorGUIUtility.TrTextContent("LODGroup setting");
             public readonly GUIContent BuildButton = EditorGUIUtility.TrTextContent("Build HLOD");
             public readonly GUIContent DestoryButton = EditorGUIUtility.TrTextContent("Destroy HLOD");
@@ -49,17 +47,11 @@ namespace Unity.AutoLOD
             }
         }
 
-
         private System.Type[] batcherTypes;
         private string[] batcherDisplayNames;
-        private IBatcher currentBatcher;
-
-        private LODSlider slider;
-
-        private SceneLODCreator.Options options;
 
         private SerializedObject serializedObject;
-
+        private LODSlider slider;
 
         public GenerateSceneLODWindow()
         {
@@ -74,21 +66,19 @@ namespace Unity.AutoLOD
         void OnDisable()
         {
             slider = null;
-
             serializedObject = null;
-            options = null;
         }
 
         void Initialize()
         {
-            options = CreateInstance<SceneLODCreator.Options>();
+            var options = SceneLODCreator.instance.GetOptions();
             options.LoadFromEditorPrefs();
 
             serializedObject = new SerializedObject(options);
 
             slider = new LODSlider();
             slider.InsertRange("Detail", serializedObject.FindProperty("LODRange"));
-            slider.InsertRange("LOD", null);
+            slider.InsertRange("HLOD", null);
         }
 
   
@@ -96,34 +86,18 @@ namespace Unity.AutoLOD
         {
             batcherTypes = ObjectUtils.GetImplementationsOfInterface(typeof(IBatcher)).ToArray();
             batcherDisplayNames = batcherTypes.Select(t => t.Name).ToArray();
-            var type = System.Type.GetType(EditorPrefs.GetString(k_DefaultBatcher, null));
 
-            if (type == null && batcherTypes.Length > 0)
-                type = Type.GetType(batcherTypes[0].AssemblyQualifiedName);
-
-
-            SetBatcher(type);
-            options.LoadFromEditorPrefs();
+            SceneLODCreator.instance.GetOptions().LoadFromEditorPrefs();
         }
-
-        void SetBatcher(Type type)
-        {
-            if (type != null)
-            {
-                currentBatcher = (IBatcher) Activator.CreateInstance(type);
-                EditorPrefs.SetString(k_DefaultBatcher, type.AssemblyQualifiedName);
-            }
-            else
-            {
-                currentBatcher = null;
-                EditorPrefs.DeleteKey(k_DefaultBatcher);
-            }
-        }
-
-
 
         void OnGUI()
         {
+            if ( serializedObject.targetObject == null)
+            { 
+                Initialize(); 
+            }
+            serializedObject.Update();
+            
             if (SceneLOD.instance.RootVolume != null)
             {
                 GUI.enabled = false;
@@ -141,34 +115,71 @@ namespace Unity.AutoLOD
 
         void DrawGenerate(bool rootExists)
         {
-            if (options == null)
-            {
-                Initialize();
-            }
-            serializedObject.Update();
+           
 
-            if (currentBatcher == null)
-            {
-                EditorGUILayout.HelpBox(Styles.NoBatcherMsg);
-                return;
-            }
+            //if (currentBatcher == null)
+            //{
+            //    EditorGUILayout.HelpBox(Styles.NoBatcherMsg);
+            //    return;
+            //}
 
             EditorGUI.BeginChangeCheck();
 
             GUI.enabled = rootExists && !SceneLODCreator.instance.IsCreating();
-            options.VolumeSplitCount = EditorGUILayout.IntField(Styles.LODGroupCount, options.VolumeSplitCount);
 
-            DrawSlider();
-            DrawBatcher();
-            DrawSimplification();
-
+            
+            DrawCommon();
+            DrawGroups();
+            
 
             if (serializedObject.ApplyModifiedProperties() || EditorGUI.EndChangeCheck())
             {
-                options.SaveToEditorPrefs();
+                SceneLODCreator.instance.GetOptions().SaveToEditorPrefs();
             }
 
             GUI.enabled = true;
+        }
+
+        private bool m_CommonExpanded = true;
+        void DrawCommon()
+        {
+            var options = SceneLODCreator.instance.GetOptions();
+            m_CommonExpanded = EditorGUILayout.Foldout(m_CommonExpanded, "Common");
+            if (m_CommonExpanded)
+            {
+                EditorGUI.indentLevel += 1;
+                options.VolumeSize = EditorGUILayout.FloatField(Styles.LODGroupSize, options.VolumeSize);
+                DrawSlider();
+                EditorGUI.indentLevel -= 1;
+            }
+
+            GUILayout.Space(10);
+        }
+
+        private Dictionary<string, bool> m_GroupExpanded = new Dictionary<string, bool>();
+        void DrawGroups()
+        {
+            var options = SceneLODCreator.instance.GetOptions();
+
+            foreach (var pair in options.GroupOptions)
+            {
+                string groupName = pair.Key;
+                if ( m_GroupExpanded.ContainsKey( groupName ) == false )
+                    m_GroupExpanded.Add(groupName, true);
+
+                m_GroupExpanded[groupName] = EditorGUILayout.Foldout(m_GroupExpanded[groupName], groupName);
+                if (m_GroupExpanded[groupName])
+                {
+                    EditorGUI.indentLevel += 1;
+
+                    DrawBatcher(groupName, pair.Value);
+                    DrawSimplification(pair.Value);
+
+                    EditorGUI.indentLevel -= 1;
+                }
+                GUILayout.Space(10);
+            }
+
         }
 
         void DrawSlider()
@@ -180,36 +191,51 @@ namespace Unity.AutoLOD
             EditorGUILayout.Space();
 
         }
-        void DrawBatcher()
+        void DrawBatcher(string groupName, SceneLODCreator.GroupOptions groupOptions)
         {
-            if (currentBatcher != null)
+            if (groupOptions.BatcherType == null)
             {
-                int batcherIndex = Array.IndexOf(batcherDisplayNames, currentBatcher.GetType().Name);
+                if (batcherTypes.Length > 0)
+                {
+                    groupOptions.BatcherType = batcherTypes[0];
+                    groupOptions.Batcher = (IBatcher) Activator.CreateInstance(groupOptions.BatcherType, groupName);
+                    GUI.changed = true; //< for store value.
+                }
+            }
+            if (groupOptions.BatcherType != null)
+            {
+                int batcherIndex = Array.IndexOf(batcherDisplayNames, groupOptions.BatcherType.Name);
                 int newIndex = EditorGUILayout.Popup(Styles.Batcher, batcherIndex, batcherDisplayNames.ToArray());
                 if (batcherIndex != newIndex)
                 {
-                    SetBatcher(batcherTypes[newIndex]);
+                    groupOptions.BatcherType = batcherTypes[newIndex];
+                    groupOptions.Batcher = (IBatcher) Activator.CreateInstance(groupOptions.BatcherType, groupName);
+                    //we don't need GUI.changed here. 
+                    //Already set a value when popup index was changed.
                 }
 
-                var option = currentBatcher.GetBatcherOption();
-                if (option != null)
+                if (groupOptions.Batcher != null)
                 {
-                    EditorGUI.indentLevel = 1;
-                    option.OnGUI();
-                    EditorGUI.indentLevel = 0;
+                    var option = groupOptions.Batcher.GetBatcherOption();
+                    if (option != null)
+                    {
+                        EditorGUI.indentLevel += 1;
+                        option.OnGUI();
+                        EditorGUI.indentLevel -= 1;
+                    }
                 }
             }
             EditorGUILayout.Space();
         }
 
-        private void DrawSimplification()
+        private void DrawSimplification(SceneLODCreator.GroupOptions groupOptions)
         {
-            options.VolumeSimplification = EditorGUILayout.Toggle(Styles.VolumeSimplification, options.VolumeSimplification);
-            if (options.VolumeSimplification)
+            groupOptions.VolumeSimplification = EditorGUILayout.Toggle(Styles.VolumeSimplification, groupOptions.VolumeSimplification);
+            if (groupOptions.VolumeSimplification)
             {
-                EditorGUI.indentLevel = 1;
-                options.VolumePolygonRatio = EditorGUILayout.Slider(Styles.PolygonRatio, options.VolumePolygonRatio, 0.0f, 1.0f);
-                EditorGUI.indentLevel = 0;
+                EditorGUI.indentLevel += 1;
+                groupOptions.VolumePolygonRatio = EditorGUILayout.Slider(Styles.PolygonRatio, groupOptions.VolumePolygonRatio, 0.0f, 1.0f);
+                EditorGUI.indentLevel -= 1;
             }
 
             EditorGUILayout.Space();
@@ -246,7 +272,9 @@ namespace Unity.AutoLOD
             {
                 if (GUILayout.Button(Styles.BuildButton) == true)
                 {
-                    SceneLODCreator.instance.Create(options, currentBatcher, () =>
+                    var hlodGroups = HLODGroup.FindAllGroups();
+                    
+                    SceneLODCreator.instance.Create(hlodGroups, () =>
                     {
                         //redraw this window.
                         Repaint();
