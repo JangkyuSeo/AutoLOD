@@ -3,6 +3,7 @@ using System.CodeDom;
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -452,6 +453,20 @@ namespace Unity.AutoLOD
         {
             m_JobContainer.Clear();
             SimplifierRunner.instance.Cancel();
+        }
+
+        public void Destroy()
+        {
+            if ( m_RootVolume != null )
+                m_RootVolume.ResetLODGroup();
+
+            MonoBehaviourHelper.StartCoroutine(ObjectUtils.FindGameObject("HLODs",
+                root => { DestroyImmediate(root); }));
+            
+            DestroyImmediate(m_RootVolume.gameObject);
+
+            Utilities.FileUtils.DeleteDirectory(Application.dataPath + Path.DirectorySeparatorChar + SceneLOD.GetSceneLODPath());
+            AssetDatabase.Refresh();
         }
 
 
