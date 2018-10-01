@@ -57,6 +57,8 @@ namespace Unity.AutoLOD
         {
             yield return PackTextures(hlodRoot);
 
+            Dictionary<Texture2D, Material> createdMaterials = new Dictionary<Texture2D, Material>();
+
             foreach (Transform child in hlodRoot.transform)
             {
                 var go = child.gameObject;
@@ -193,22 +195,34 @@ namespace Unity.AutoLOD
 
                 var meshRenderer = go.AddComponent<MeshRenderer>();
                 Material material = null;
-                if (option.BatchMaterial == null)
+                if (createdMaterials.ContainsKey(atlas.textureAtlas) == false)
                 {
-                    material = new Material(Shader.Find("Custom/AutoLOD/SimpleBatcher"));
+                    if (option.BatchMaterial == null)
+                    {
+                        material = new Material(Shader.Find("Custom/AutoLOD/SimpleBatcher"));
+                    }
+                    else
+                    {
+                        material = new Material(option.BatchMaterial);
+                    }
+
+                    material.mainTexture = atlas.textureAtlas;
+
+                    string matName = hlodRoot.name + "_" + createdMaterials.Count;
+                    AssetDatabase.CreateAsset(material, "Assets/" + SceneLOD.GetSceneLODPath() + matName + ".mat");
+
+                    createdMaterials.Add(atlas.textureAtlas, material);
                 }
                 else
                 {
-                    material = new Material(option.BatchMaterial);
+                    material = createdMaterials[atlas.textureAtlas];
                 }
-
-                material.mainTexture = atlas.textureAtlas;
+                
                 meshRenderer.sharedMaterial = material;
 
                 string assetName = hlodRoot.name + "_" + go.name;
                                 
                 AssetDatabase.CreateAsset(combinedMesh, "Assets/" + SceneLOD.GetSceneLODPath() + assetName + ".asset");
-                AssetDatabase.CreateAsset(material, "Assets/" + SceneLOD.GetSceneLODPath() + assetName + ".mat");
                 AssetDatabase.SaveAssets();
             }
         }
