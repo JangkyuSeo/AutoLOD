@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Simplygon.Unity.EditorPlugin;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -20,16 +21,9 @@ namespace Unity.AutoLOD
             {
                 if (!m_WhiteTexture)
                 {
-                    var path = "Assets/AutoLOD/Generated/Atlases/white.asset";
-                    m_WhiteTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
                     if (!m_WhiteTexture)
                     {
                         m_WhiteTexture = Object.Instantiate(Texture2D.whiteTexture);
-                        var directory = Path.GetDirectoryName(path);
-                        if (!Directory.Exists(directory))
-                            Directory.CreateDirectory(directory);
-
-                        AssetDatabase.CreateAsset(m_WhiteTexture, path);
                     }
                 }
 
@@ -191,7 +185,7 @@ namespace Unity.AutoLOD
                 combinedMesh.RecalculateBounds();
                 var meshFilter = go.AddComponent<MeshFilter>();
                 meshFilter.sharedMesh = combinedMesh;
-
+                
                 for (int i = 0; i < meshFilters.Length; i++)
                 {
                     Object.DestroyImmediate(meshFilters[i].gameObject);
@@ -210,6 +204,12 @@ namespace Unity.AutoLOD
 
                 material.mainTexture = atlas.textureAtlas;
                 meshRenderer.sharedMaterial = material;
+
+                string assetName = hlodRoot.name + "_" + go.name;
+                                
+                AssetDatabase.CreateAsset(combinedMesh, "Assets/" + SceneLOD.GetSceneLODPath() + assetName + ".asset");
+                AssetDatabase.CreateAsset(material, "Assets/" + SceneLOD.GetSceneLODPath() + assetName + ".mat");
+                AssetDatabase.SaveAssets();
             }
         }
 
