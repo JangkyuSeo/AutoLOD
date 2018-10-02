@@ -15,6 +15,7 @@ namespace Unity.AutoLOD
     {
         public static bool enabled { set; get; }
         public static Type meshSimplifierType { set; get; }
+        public static float meshSimplificationRatio { set; get; }
         public static int maxLOD { set; get; }
         public static int initialLODMaxPolyCount { set; get; }
 
@@ -151,7 +152,7 @@ namespace Unity.AutoLOD
                             var meshLOD = new MeshLOD();
                             meshLOD.inputMesh = inputMesh;
                             meshLOD.outputMesh = outputMesh;
-                            meshLOD.quality = Mathf.Pow(0.5f, i);
+                            meshLOD.quality = Mathf.Pow(importSettings.meshSimplificationRatio, i);
                             meshLOD.meshSimplifierType = simplifierType;
                             meshLODs.Add(meshLOD);
                         }
@@ -240,7 +241,7 @@ namespace Unity.AutoLOD
                 {
                     var lod = new LOD();
                     lod.renderers = lodData[i];
-                    var screenPercentage = i == maxLODFound ? 0.01f : Mathf.Pow(0.5f, i + 1);
+                    var screenPercentage = i == maxLODFound ? 0.01f : Mathf.Pow(importSettings.meshSimplificationRatio, i + 1);
 
                     // Use the model importer percentages if they exist
                     if (i < importerLODLevels.arraySize && maxLODFound == importerLODLevels.arraySize)
@@ -329,6 +330,7 @@ namespace Unity.AutoLOD
             {
                 importSettings.generateOnImport = enabled;
                 importSettings.meshSimplifier = meshSimplifierType.AssemblyQualifiedName;
+                importSettings.meshSimplificationRatio = meshSimplificationRatio;
                 importSettings.maxLODGenerated = maxLOD;
                 importSettings.initialLODMaxPolyCount = initialLODMaxPolyCount;
             }

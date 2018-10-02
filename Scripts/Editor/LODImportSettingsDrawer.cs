@@ -27,6 +27,13 @@ namespace Unity.AutoLOD
             {
                 PropertyTypeField<IMeshSimplifier>(property.FindPropertyRelative("meshSimplifier"));
 
+                var meshSimplificationRatioProperty = property.FindPropertyRelative("meshSimplificationRatio");
+                EditorGUI.BeginChangeCheck();
+                var meshSimplificationRatio = EditorGUILayout.Slider("Mesh simplification ratio",
+                    meshSimplificationRatioProperty.floatValue, 0.0f, 1.0f);
+                if (EditorGUI.EndChangeCheck())
+                    meshSimplificationRatioProperty.floatValue = meshSimplificationRatio;
+
                 var maxLODProperty = property.FindPropertyRelative("maxLODGenerated");
                 var maxLODValues = Enumerable.Range(0, LODData.MaxLOD + 1).ToArray();
                 EditorGUI.BeginChangeCheck();
