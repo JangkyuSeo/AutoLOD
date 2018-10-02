@@ -150,35 +150,43 @@ namespace Unity.AutoLOD
             return groups;
         }
 
-        static List<LODGroup> FindAllGroupsInHLODGroup(List<HLODGroup> hlodGroups)
+        static List<LODGroup> RemoveExclude(List<LODGroup> groups)
         {
-            List<LODGroup> lodGroups = new List<LODGroup>();
-
-            foreach (var group in hlodGroups)
+            groups.RemoveAll(r =>
             {
-                lodGroups.AddRange(group.GetComponentsInChildren<LODGroup>());
-            }
+                if (r == null)
+                    return false;
 
-            return RemoveHLODLayer(lodGroups);
+                return r.GetComponentInParent<HLODExcluder>() != null;
+            });
+
+            return groups; 
         }
-        static Dictionary<string, List<LODGroup>> FindAllGroups(Dictionary<string, List<HLODGroup>> hlodGroups)
+
+        static Dictionary<string, List<LODGroup>> FindAllGroups()
         {
             Dictionary<string, List<LODGroup>> lodGroups = new Dictionary<string, List<LODGroup>>();
-            List<LODGroup> allGroups = RemoveHLODLayer( FindObjectsOfType<LODGroup>().ToList() );
+            List<LODGroup> allGroups = RemoveExclude(RemoveHLODLayer( FindObjectsOfType<LODGroup>().ToList() ));
 
-            foreach (var pair in hlodGroups)
+            lodGroups.Add("", new List<LODGroup>());
+
+            foreach (var group in allGroups)
             {
-                var groups = FindAllGroupsInHLODGroup(pair.Value);
-                lodGroups.Add(pair.Key, groups);
+                var hlodGroup = group.GetComponentInParent<HLODGroup>();
 
-                allGroups.RemoveAll(g => groups.Contains(g));
+                if (hlodGroup != null)
+                {
+
+                    if (lodGroups.ContainsKey(hlodGroup.GroupName) == false)
+                        lodGroups.Add(hlodGroup.GroupName, new List<LODGroup>());
+
+                    lodGroups[hlodGroup.GroupName].Add(group);
+                }
+                else
+                {
+                    lodGroups[""].Add(group);
+                }
             }
-
-            if( lodGroups.ContainsKey("") == false )
-                lodGroups.Add("", new List<LODGroup>());
-
-            //add remain groups to default group.
-            lodGroups[""].AddRange(allGroups);
 
             return lodGroups;
         }
@@ -409,9 +417,9 @@ namespace Unity.AutoLOD
             }
         }
 
-        public void Create(Dictionary<string, List<HLODGroup>> groups, Action finishAction)
+        public void Create(Action finishAction)
         {
-            var lodGroups = FindAllGroups(groups);
+            var lodGroups = FindAllGroups();
             if (lodGroups.Count == 0)
                 return;
 

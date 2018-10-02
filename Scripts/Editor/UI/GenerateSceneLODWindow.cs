@@ -265,10 +265,8 @@ namespace Unity.AutoLOD
             else
             {
                 if (GUILayout.Button(Styles.BuildButton) == true)
-                {
-                    var hlodGroups = HLODGroup.FindAllGroups();
-                    
-                    SceneLODCreator.instance.Create(hlodGroups, () =>
+                {                    
+                    SceneLODCreator.instance.Create(() =>
                     {
                         //redraw this window.
                         Repaint();
