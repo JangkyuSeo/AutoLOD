@@ -16,6 +16,7 @@ public class LODVolume : MonoBehaviour
 {
     public const string HLODLayer = "HLOD";
     public static Type meshSimplifierType { set; get; }
+    public static float meshSimplificationRatio { set; get; }
 
     [Serializable]
     public class LODVolumeGroup
@@ -246,7 +247,7 @@ public class LODVolume : MonoBehaviour
 
 
 
-                    meshSimplifier.Simplify(inputMesh, outputMesh, Mathf.Pow(0.5f, l), () =>
+                    meshSimplifier.Simplify(inputMesh, outputMesh, Mathf.Pow(meshSimplificationRatio, l), () =>
                     {
                         Debug.Log("Completed LOD " + index);
                         outputMesh.ApplyToMesh(simplifiedMesh);
@@ -261,7 +262,7 @@ public class LODVolume : MonoBehaviour
 
                 var lod = lods[l];
                 lod.renderers = lodRenderers.ToArray();
-                lod.screenRelativeTransitionHeight = l == maxLOD ? 0.01f : Mathf.Pow(0.5f, l + 1);
+                lod.screenRelativeTransitionHeight = l == maxLOD ? 0.01f : Mathf.Pow(meshSimplificationRatio, l + 1);
                 lods[l] = lod;
             }
 

@@ -7,6 +7,7 @@ namespace Unity.AutoLOD
     {
         public bool generateOnImport;
         public string meshSimplifier;
+        public float meshSimplificationRatio;
         public int maxLODGenerated;
         public int initialLODMaxPolyCount;
     }

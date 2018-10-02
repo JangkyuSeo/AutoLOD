@@ -19,6 +19,8 @@ namespace Unity.AutoLOD
         const int k_DefaultMaxExecutionTime = 8;
         const string k_DefaultMeshSimplifier = "AutoLOD.DefaultMeshSimplifier";
         const string k_DefaultMeshSimplifierDefault = "QuadricMeshSimplifier";
+        const string k_SimplificationRatio = "AutoLOD.SimplificationRatio";
+        const float k_DefaultSimplificationRatio = 0.5f;
         const string k_MaxLOD = "AutoLOD.MaxLOD";
         const int k_DefaultMaxLOD = 2;
         const string k_GenerateOnImport = "AutoLOD.GenerateOnImport";
@@ -53,6 +55,19 @@ namespace Unity.AutoLOD
                 if (type == null && meshSimplifiers.Length > 0)
                     type = Type.GetType(meshSimplifiers[0].AssemblyQualifiedName);
                 return type;
+            }
+        }
+
+        public static float meshSimplificationRatio
+        {
+            set
+            {
+                EditorPrefs.SetFloat(k_SimplificationRatio, value);
+                UpdateDependencies();
+            }
+            get
+            {
+                return EditorPrefs.GetFloat(k_SimplificationRatio, k_DefaultSimplificationRatio);
             }
         }
 
@@ -93,13 +108,16 @@ namespace Unity.AutoLOD
 #if UNITY_2017_3_OR_NEWER
             MonoBehaviourHelper.maxSharedExecutionTimeMS = maxExecutionTime == 0 ? Mathf.Infinity : maxExecutionTime;
 
-            LODDataEditor.meshSimplifier = meshSimplifierType.AssemblyQualifiedName;            
+            LODDataEditor.meshSimplifier = meshSimplifierType.AssemblyQualifiedName;
+            LODDataEditor.meshSimplificationRate = meshSimplificationRatio;
             LODDataEditor.maxLODGenerated = maxLOD;
             LODDataEditor.initialLODMaxPolyCount = initialLODMaxPolyCount;
 
             LODVolume.meshSimplifierType = meshSimplifierType;
+            LODVolume.meshSimplificationRatio = meshSimplificationRatio;
 
             ModelImporterLODGenerator.meshSimplifierType = meshSimplifierType;
+            ModelImporterLODGenerator.meshSimplificationRatio = meshSimplificationRatio;
             ModelImporterLODGenerator.maxLOD = maxLOD;
             ModelImporterLODGenerator.enabled = generateOnImport;
             ModelImporterLODGenerator.initialLODMaxPolyCount = initialLODMaxPolyCount;
@@ -391,7 +409,7 @@ namespace Unity.AutoLOD
                 var lods = new LOD[maxLOD + 1];
                 var lod0 = lods[0];
                 lod0.renderers = go.GetComponentsInChildren<MeshRenderer>();
-                lod0.screenRelativeTransitionHeight = 0.5f;
+                lod0.screenRelativeTransitionHeight = meshSimplificationRatio;
                 lods[0] = lod0;
 
                 var meshes = new List<Mesh>();
@@ -432,7 +450,7 @@ namespace Unity.AutoLOD
                         var outputMesh = simplifiedMesh.ToWorkingMesh();
 
                         var meshSimplifier = (IMeshSimplifier)Activator.CreateInstance(meshSimplifierType);
-                        meshSimplifier.Simplify(inputMesh, outputMesh, Mathf.Pow(0.5f, index), () =>
+                        meshSimplifier.Simplify(inputMesh, outputMesh, Mathf.Pow(meshSimplificationRatio, index), () =>
                         {
                             outputMesh.ApplyToMesh(simplifiedMesh);
                             simplifiedMesh.RecalculateBounds();
@@ -442,7 +460,7 @@ namespace Unity.AutoLOD
 
                     var lod = lods[l];
                     lod.renderers = lodRenderers.ToArray();
-                    lod.screenRelativeTransitionHeight = l == maxLOD ? 0.01f : Mathf.Pow(0.5f, l + 1);
+                    lod.screenRelativeTransitionHeight = l == maxLOD ? 0.01f : Mathf.Pow(meshSimplificationRatio, l + 1);
                     lods[l] = lod;
                 }
 
@@ -558,6 +576,15 @@ namespace Unity.AutoLOD
                 else
                 {
                     EditorGUILayout.HelpBox("No IMeshSimplifiers found!", MessageType.Warning);
+                }
+            }
+            //Mesh simplification ratio
+            {
+                EditorGUI.BeginChangeCheck();
+                var ratio = EditorGUILayout.Slider("Mesh Simplification Ratio", meshSimplificationRatio, 0.0f, 1.0f);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    meshSimplificationRatio = ratio;
                 }
             }
 
