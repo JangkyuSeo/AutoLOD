@@ -32,22 +32,21 @@ namespace Unity.AutoLOD
             m_IsWorking = true;
             for (int i = 0; i < k_MaxWorkerCount; ++i)
             {
-                BackgroundWorker worker = new BackgroundWorker();
-                worker.DoWork += Worker_DoWork;
-                worker.RunWorkerAsync();
-                m_Workers.Add(worker);
+                Thread thread = new Thread(Worker_DoWork);
+                thread.Start();
+                m_Workers.Add(thread);
             }
             
         }
-
-        
 
         void OnDisable()
         {
             m_IsWorking = false;
             foreach (var worker in m_Workers)
             {
-                worker.Dispose();
+                //Thread is wait done some process which runs on the main thread.
+                //So, join is not any effect in this case.
+                worker.Abort();
             }
 
             EditorApplication.update -= EditorUpdate;
@@ -64,7 +63,7 @@ namespace Unity.AutoLOD
             OnEnable();
         }
 
-        private void Worker_DoWork(object sender, DoWorkEventArgs e)
+        private void Worker_DoWork()
         {
             while (m_IsWorking)
             {
@@ -84,7 +83,18 @@ namespace Unity.AutoLOD
                     actionContainer = m_SimplificationActions.Dequeue();
                 }
 
-                actionContainer.DoAction();
+                try
+                {
+                    actionContainer.DoAction();
+                }
+                catch (Exception e)
+                {
+                    if (e is ThreadAbortException)
+                        return;
+
+                    Debug.LogError("Exception occur : " + e.Message);
+                    continue;
+                }
 
                 lock (m_CompleteActions)
                 {
@@ -128,7 +138,7 @@ namespace Unity.AutoLOD
 
 
         private bool m_IsWorking = false;
-        private List<BackgroundWorker> m_Workers = new List<BackgroundWorker>();
+        private List<Thread> m_Workers = new List<Thread>();
 
         private Queue<ActionContainer> m_SimplificationActions = new Queue<ActionContainer>();
         private Queue<Action> m_CompleteActions = new Queue<Action>();
