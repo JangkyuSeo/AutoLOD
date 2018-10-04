@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading;
@@ -18,7 +19,7 @@ namespace Unity.AutoLOD
     class SimplifierRunner : ScriptableSingleton<SimplifierRunner>
     {
         private const int k_MaxWorkerCount = 8;
-
+        private const int k_WaitTerminateMS = 3000;
 
         void OnEnable()
         {
@@ -32,22 +33,22 @@ namespace Unity.AutoLOD
             m_IsWorking = true;
             for (int i = 0; i < k_MaxWorkerCount; ++i)
             {
-                BackgroundWorker worker = new BackgroundWorker();
-                worker.DoWork += Worker_DoWork;
-                worker.RunWorkerAsync();
-                m_Workers.Add(worker);
+                Thread thread = new Thread(Worker_DoWork);
+                thread.Start();
+                m_Workers.Add(thread);
             }
             
         }
-
-        
 
         void OnDisable()
         {
             m_IsWorking = false;
             foreach (var worker in m_Workers)
             {
-                worker.Dispose();
+                if (worker.Join(k_WaitTerminateMS) == false)
+                {
+                    worker.Abort();
+                }
             }
 
             EditorApplication.update -= EditorUpdate;
@@ -64,7 +65,7 @@ namespace Unity.AutoLOD
             OnEnable();
         }
 
-        private void Worker_DoWork(object sender, DoWorkEventArgs e)
+        private void Worker_DoWork()
         {
             while (m_IsWorking)
             {
@@ -84,12 +85,56 @@ namespace Unity.AutoLOD
                     actionContainer = m_SimplificationActions.Dequeue();
                 }
 
-                actionContainer.DoAction();
-
-                lock (m_CompleteActions)
+                try
                 {
-                    m_CompleteActions.Enqueue(actionContainer.CompleteAction);
+
+                    Stack<IEnumerator> coroutineStack = actionContainer.CoroutineStack;
+
+                    while (coroutineStack.Count > 0)
+                    {
+                        if (m_IsWorking == false)
+                            return;
+
+                        IEnumerator coroutine = coroutineStack.Peek();
+
+                        if (coroutine.MoveNext())
+                        {
+                            if (coroutine.Current == null)
+                            {
+                                Thread.Sleep(20);
+                                continue;
+                            }
+
+                            var next = coroutine.Current as IEnumerator;
+                            if ( next != null)
+                            {
+                                coroutineStack.Push(next);
+                            }
+                        }
+                        else
+                        {
+                            coroutineStack.Pop();
+                        }
+                    }
+
+                    if (coroutineStack.Count == 0)
+                    {
+                        lock (m_CompleteActions)
+                        {
+                            m_CompleteActions.Enqueue(actionContainer.CompleteAction);
+                        }
+                    }
                 }
+                catch (Exception e)
+                {
+                    if (e is ThreadAbortException)
+                        return;
+
+                    Debug.LogError("Exception occur : " + e.Message);
+                    continue;
+                }
+
+                
             }
         }
         private void EditorUpdate()
@@ -109,26 +154,27 @@ namespace Unity.AutoLOD
             }
         }
 
-        public void EnqueueSimplification(Action doAction, Action completeAction)
+        public void EnqueueSimplification(IEnumerator coroutine, Action completeAction)
         {
             lock (m_SimplificationActions)
             {
                 ActionContainer container;
-                container.DoAction = doAction;
+                container.CoroutineStack = new Stack<IEnumerator>();
                 container.CompleteAction = completeAction;
+                container.CoroutineStack.Push(coroutine);
                 m_SimplificationActions.Enqueue(container);
             }
         }
 
         private struct ActionContainer
         {
-            public Action DoAction;
+            public Stack<IEnumerator> CoroutineStack;
             public Action CompleteAction;
         }
 
 
         private bool m_IsWorking = false;
-        private List<BackgroundWorker> m_Workers = new List<BackgroundWorker>();
+        private List<Thread> m_Workers = new List<Thread>();
 
         private Queue<ActionContainer> m_SimplificationActions = new Queue<ActionContainer>();
         private Queue<Action> m_CompleteActions = new Queue<Action>();
