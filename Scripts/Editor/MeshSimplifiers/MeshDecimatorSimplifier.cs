@@ -1,4 +1,6 @@
-﻿#if ENABLE_MESHDECIMATOR
+﻿using System.Collections;
+
+#if ENABLE_MESHDECIMATOR
 // Pull from https://github.com/Whinarn/MeshDecimator and copy UnityExample/Assets/Plugins/MeshDecimator into your AutoLOD/Packages directory
 using System;
 using MeshDecimator;
@@ -25,37 +27,39 @@ namespace Unity.AutoLOD
 {
     public class MeshDecimatorSimplifier : IMeshSimplifier
     {
-        public void Simplify(WMesh inputMesh, WMesh outputMesh, float quality, Action completeAction)
+        IEnumerator Simplify(WorkingMesh inputMesh, WorkingMesh outputMesh, float quality)
         {
-            Action doAction = () => 
+            var enableLogging = false;
+            int totalTriangleCount;
+            var sourceMesh = ToMeshDecimatorMesh(inputMesh, out totalTriangleCount);
+            int targetTriangleCount = Mathf.CeilToInt(totalTriangleCount * quality);
+
+            var algorithm = MeshDecimation.CreateAlgorithm(Algorithm.Default);
+            algorithm.KeepLinkedVertices = false;
+
+            DecimationAlgorithm.StatusReportCallback statusCallback = (iteration, tris, currentTris, targetTris) =>
             {
-                var enableLogging = false;
-                int totalTriangleCount;
-                var sourceMesh = ToMeshDecimatorMesh(inputMesh, out totalTriangleCount);
-                int targetTriangleCount = Mathf.CeilToInt(totalTriangleCount * quality);
-
-                var algorithm = MeshDecimation.CreateAlgorithm(Algorithm.Default);
-                algorithm.KeepLinkedVertices = false;
-
-                DecimationAlgorithm.StatusReportCallback statusCallback = (iteration, tris, currentTris, targetTris) =>
-                {
-                    Debug.LogFormat("Iteration {0}: tris {1} current {2} target {3}", iteration, tris, currentTris, targetTris);
-                };
-
-                if (enableLogging)
-                    algorithm.StatusReport += statusCallback;
-
-                var destMesh = MeshDecimation.DecimateMesh(algorithm, sourceMesh, targetTriangleCount);
-
-                if (enableLogging)
-                    algorithm.StatusReport -= statusCallback;
-
-                FromMeshDecimatorMesh(destMesh, false, ref outputMesh);
-
+                Debug.LogFormat("Iteration {0}: tris {1} current {2} target {3}", iteration, tris, currentTris,
+                    targetTris);
             };
 
-            SimplifierRunner.instance.EnqueueSimplification(doAction, completeAction);
-            
+            if (enableLogging)
+                algorithm.StatusReport += statusCallback;
+
+            var destMesh = MeshDecimation.DecimateMesh(algorithm, sourceMesh, targetTriangleCount);
+
+            if (enableLogging)
+                algorithm.StatusReport -= statusCallback;
+
+            FromMeshDecimatorMesh(destMesh, false, ref outputMesh);
+
+            yield break;
+        }
+
+        public void Simplify(WorkingMesh inputMesh, WorkingMesh outputMesh, float quality, Action completeAction)
+        {
+            SimplifierRunner.instance.EnqueueSimplification(Simplify(inputMesh, outputMesh, quality), completeAction);
+
         }
 
         static Vector3d[] ToVector3d(Vector3[] inputVectors)
