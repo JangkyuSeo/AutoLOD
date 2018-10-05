@@ -19,6 +19,7 @@ namespace Unity.AutoLOD
     {
         private const string k_SceneLODWindowMenuPath = "AutoLOD/Generate SceneLOD Window";
         private const string k_ShowVolumeBoundsMenuPath = "AutoLOD/Show Volume Bounds";
+        private const string k_ClearCacheMemoryMenuPath = "AutoLOD/Clear Cache Memory";
 
         private const string k_HLODRootContainer = "HLODs";
 
@@ -218,7 +219,7 @@ namespace Unity.AutoLOD
             EditorWindow.GetWindow<GenerateSceneLODWindow>(false, "Generate SceneLOD").Show();
         }
 
-        [MenuItem(k_ShowVolumeBoundsMenuPath, priority = 50)]
+        [MenuItem(k_ShowVolumeBoundsMenuPath, priority = 100)]
         static void ShowVolumeBounds(MenuCommand menuCommand)
         {
             bool showVolume = !Settings.ShowVolumeBounds;
@@ -231,6 +232,12 @@ namespace Unity.AutoLOD
             if (mouseOverWindow)
                 mouseOverWindow.Repaint();
 
+        }
+
+        [MenuItem(k_ClearCacheMemoryMenuPath, priority = 50)]
+        static void ClearCacheMemory(MenuCommand menuCommand)
+        {
+            LODCache.Cache.ClearMemory();
         }
 #endif
 #endregion
