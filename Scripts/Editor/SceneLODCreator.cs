@@ -11,6 +11,7 @@ using Unity.AutoLOD.Utilities;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.PlayerLoop;
+using Cache = Unity.AutoLOD.LODCache.Cache;
 using Mesh = UnityEngine.Mesh;
 using Object = UnityEngine.Object;
 using Dbg = UnityEngine.Debug;
@@ -419,6 +420,9 @@ namespace Unity.AutoLOD
 
         public void Create(Action finishAction)
         {
+            //Assets should be saved which changed.
+            AssetDatabase.SaveAssets();          
+
             var lodGroups = FindAllGroups();
             if (lodGroups.Count == 0)
                 return;
@@ -470,8 +474,9 @@ namespace Unity.AutoLOD
 
             MonoBehaviourHelper.StartCoroutine(ObjectUtils.FindGameObject("HLODs",
                 root => { DestroyImmediate(root); }));
-            
-            DestroyImmediate(m_RootVolume.gameObject);
+
+            if (m_RootVolume != null)
+                DestroyImmediate(m_RootVolume.gameObject);
 
             Utilities.FileUtils.DeleteDirectory(Application.dataPath + Path.DirectorySeparatorChar + SceneLOD.GetSceneLODPath());
             AssetDatabase.Refresh();
@@ -582,70 +587,37 @@ namespace Unity.AutoLOD
                 yield break;
             }
 
-
-            List<Mesh> meshes;
-            if (m_LODMeshes.ContainsKey(mesh))
+            if (mesh.triangles.Length < 10)
             {
-                meshes = m_LODMeshes[mesh];
-            }
-            else
-            {
-                meshes = new List<Mesh>();
-                m_LODMeshes[mesh] = meshes;
-
-                meshes.Add(mesh);
-            }
- 
-            //where is resize?
-            while (meshes.Count <= depth)
-            {
-                meshes.Add(null);
+                if (returnCallback != null)
+                    returnCallback(mesh);
+                
+                yield break;
             }
 
-            if (meshes[depth] == null)
+
+            float quality = Mathf.Pow(groupOptions.VolumePolygonRatio, depth + 1);
+            int expectTriangleCount = (int) (quality * mesh.triangles.Length);
+
+            //It need for avoid crash when simplificate in Simplygon
+            //Mesh has less vertices, it crashed when save prefab.
+            if (expectTriangleCount < 10)
             {
-                //make simplification mesh by default mesh.
-                if (meshes[0] != null)
-                {
-                    float quality = Mathf.Pow(groupOptions.VolumePolygonRatio, depth + 1);
-                    int expectTriangleCount = (int) (quality * meshes[0].triangles.Length);
+                yield return GetLODMesh(groupName, renderer, depth -1, returnCallback);
+                yield break;
+            }
 
-                    //It need for avoid crash when simplificate in Simplygon
-                    //Mesh has less vertices, it crashed when save prefab.
-                    if (expectTriangleCount < 10)
-                    {
-                        yield return GetLODMesh(groupName, renderer, depth -1, returnCallback);
-                        yield break;
-                    }
+            Mesh simplifiedMesh = Cache.GetLODMesh(mesh, quality);
 
-
-                    var simplifiedMesh = new Mesh();
-
-                    var inputMesh = meshes[0].ToWorkingMesh();
-                    var outputMesh = new WorkingMesh();
-                    
-                    var meshSimplifier = (IMeshSimplifier)Activator.CreateInstance(AutoLOD.meshSimplifierType);
-
-                    bool isDone = false;
-
-                    meshSimplifier.Simplify(inputMesh, outputMesh, quality, () =>
-                    {
-                        outputMesh.ApplyToMesh(simplifiedMesh);
-                        simplifiedMesh.RecalculateBounds();
-                        isDone = true;
-                    });
-
-
-                    while (isDone == false)
-                        yield return new MoveToEnd();
-
-                    meshes[depth] = simplifiedMesh;
-                }
+            //wait for finish baking.
+            while (simplifiedMesh.triangles.Length == 0)
+            {
+                yield return null;
             }
 
             if (returnCallback != null)
             {
-                returnCallback(meshes[depth]);
+                returnCallback(simplifiedMesh);
             }
         }
 
@@ -684,7 +656,6 @@ namespace Unity.AutoLOD
             public Stack<IEnumerator> FunctionStack = new Stack<IEnumerator>();
         };
 
-        private Dictionary<Mesh, List<Mesh>> m_LODMeshes = new Dictionary<Mesh, List<Mesh>>();
         private SortedDictionary<int, List<Job> > m_JobContainer = new SortedDictionary<int, List<Job> >();
 
     }
