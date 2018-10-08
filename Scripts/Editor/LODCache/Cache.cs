@@ -95,11 +95,23 @@ namespace Unity.AutoLOD.LODCache
             //Compare three decimal places
             int compareQuality = (int)(quality * 1000.0f + 0.5f);
 
-            foreach (var mesh in meshes.Meshes)
+            for ( int i = 0; i < meshes.Meshes.Count; ++i )
             {
+                var mesh = meshes.Meshes[i];
+
+                if (mesh.Mesh == null)
+                {
+                    meshes.Meshes[i] = meshes.Meshes.Last();
+                    meshes.Meshes.RemoveAt(meshes.Meshes.Count - 1);
+                    i -= 1;
+                    continue;
+                }
+
                 int meshQuality = (int) (mesh.Quality * 1000.0f + 0.5f);
                 if (mesh.SimplifierType == simplifierTypeStr && meshQuality == compareQuality)
+                {
                     return mesh.Mesh;
+                }
             }
 
             //Mesh not found in cache.
