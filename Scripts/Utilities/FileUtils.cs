@@ -10,6 +10,9 @@ namespace Unity.AutoLOD.Utilities
 
 		public static void DeleteDirectory(string path)
 		{
+		    if (Directory.Exists(path) == false)
+		        return;
+
 			DirectoryInfo di = new DirectoryInfo(path);
 
 			foreach (FileInfo file in di.GetFiles())

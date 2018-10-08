@@ -5,6 +5,7 @@ using UnityEditor;
 using System;
 using System.Linq;
 using System.Security.Permissions;
+using Unity.AutoLOD.Utilities;
 
 namespace Unity.AutoLOD.LODCache
 {
@@ -16,10 +17,16 @@ namespace Unity.AutoLOD.LODCache
             Instance.ClearMemoryImpl();
         }
 
+        public static void ClearDisk()
+        {
+            Instance.ClearDiskImpl();
+        }
+
         public static Mesh GetLODMesh(Mesh source, float quality)
         {
             return Instance.GetLODMeshImpl(source, quality);
         }
+        
         #endregion
 
         #region Singleton
@@ -47,6 +54,14 @@ namespace Unity.AutoLOD.LODCache
         private void ClearMemoryImpl()
         {
             m_CachedMeshes.Clear();
+            Debug.Log("LODCacheMemroy cleared.");
+        }
+
+        private void ClearDiskImpl()
+        {
+            ClearMemoryImpl();
+            FileUtils.DeleteDirectory(k_CachePath);
+            Debug.Log("LODCache cleared in disk. " + k_CachePath);
         }
 
         private Mesh GetLODMeshImpl(Mesh source, float quality)

@@ -20,6 +20,7 @@ namespace Unity.AutoLOD
         private const string k_SceneLODWindowMenuPath = "AutoLOD/Generate SceneLOD Window";
         private const string k_ShowVolumeBoundsMenuPath = "AutoLOD/Show Volume Bounds";
         private const string k_ClearCacheMemoryMenuPath = "AutoLOD/Clear Cache Memory";
+        private const string k_ClearCacheInDiskyMenuPath = "AutoLOD/Clear Cache in Disk";
 
         private const string k_HLODRootContainer = "HLODs";
 
@@ -238,6 +239,12 @@ namespace Unity.AutoLOD
         static void ClearCacheMemory(MenuCommand menuCommand)
         {
             LODCache.Cache.ClearMemory();
+        }
+
+        [MenuItem(k_ClearCacheInDiskyMenuPath, priority = 51)]
+        static void ClearCacheInDisk(MenuCommand menuCommand)
+        { 
+            LODCache.Cache.ClearDisk();
         }
 #endif
 #endregion
