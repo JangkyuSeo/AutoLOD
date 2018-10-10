@@ -1,20 +1,14 @@
 ﻿using System;
-using System.CodeDom;
 using System.Collections;
 using System.Collections.Generic;
-using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
-using System.Threading;
 using Unity.AutoLOD.Utilities;
 using UnityEditor;
 using UnityEngine;
-using UnityEngine.Experimental.PlayerLoop;
 using Cache = Unity.AutoLOD.LODCache.Cache;
 using Mesh = UnityEngine.Mesh;
-using Object = UnityEngine.Object;
-using Dbg = UnityEngine.Debug;
 
 namespace Unity.AutoLOD
 {
@@ -99,23 +93,19 @@ namespace Unity.AutoLOD
             UpdateLOD,
             Finish,
         }
-        /// <summary>
-        /// job will be moved to end of queue.
-        /// </summary>
-        class MoveToEnd : YieldInstruction
-        {
-            public MoveToEnd()
-            {
-
-            }
-        }
-
+        
         private const string k_HLODRootContainer = "HLODs";
         private const int k_Splits = 2;
 
         private GameObject m_HLODRootContainer;
         private Dictionary<string, GameObject> m_GroupHLODRootContainer;
         private LODVolume m_RootVolume;
+
+        private int currentJobCount = 0;
+        private int maxJobCount = 0;
+        private int currentProgress = 0;
+        private int maxProgress = 0;
+        
 
         private Options m_Options;
 
@@ -409,17 +399,27 @@ namespace Unity.AutoLOD
 
         IEnumerator BuildBatch()
         {
+            int index = 0;
             foreach (var pair in m_GroupHLODRootContainer)
             {
                 var groupOptions = m_Options.GroupOptions[pair.Key];
                 if (groupOptions.Batcher == null)
                     yield break;
-                yield return groupOptions.Batcher.Batch(pair.Value);
+
+                yield return groupOptions.Batcher.Batch(pair.Value, (progress) =>
+                {
+                    currentJobCount = (int) (index * 1000 + progress * 1000);
+                    maxJobCount = m_GroupHLODRootContainer.Count * 1000;
+                });
+
+                index += 1;
             }
         }
 
         public void Create(Action finishAction)
         {
+            MonoBehaviourHelper.maxSharedExecutionTimeMS = 50.0f;
+
             //Assets should be saved which changed.
             AssetDatabase.SaveAssets();          
 
@@ -454,6 +454,11 @@ namespace Unity.AutoLOD
                 if ( m_RootVolume != null )
                     m_RootVolume.ResetLODGroup();
             }), CoroutineOrder.Finish);
+
+            currentJobCount = 0;
+            maxJobCount = m_JobContainer.First().Value.Count;
+            currentProgress = 0;
+            maxProgress = (int)CoroutineOrder.Finish + 1;
         }
 
         public bool IsCreating()
@@ -466,6 +471,27 @@ namespace Unity.AutoLOD
             m_JobContainer.Clear();
             SimplifierRunner.instance.Cancel();
         }
+
+        public int GetCurrentJobCount()
+        {
+            return currentJobCount;
+        }
+        public int GetMaxJobCount()
+        {
+            return maxJobCount;
+        }
+
+        public int GetCurrentProgress()
+        {
+            return currentProgress;
+        }
+
+        public int GetMaxProgress()
+        {
+            return maxProgress;
+        }
+
+
 
         public void Destroy()
         {
@@ -513,21 +539,28 @@ namespace Unity.AutoLOD
             if (m_JobContainer.Count == 0)
                 return;
 
+            var sw = new Stopwatch();
+            sw.Start();
+
             //After all jobs of the previous priority are finished, the next priority should be executed.
             var firstItem = m_JobContainer.First();
             var jobList = firstItem.Value;
-            int containerCount = jobList.Count;
 
-            for (int i = 0; i < containerCount;)
+            for (int i = 0; i < jobList.Count;)
             {
                 Job job = jobList[i];
 
                 while (true)
                 {
+                    if (sw.ElapsedMilliseconds > 50)
+                    {
+                        sw.Stop();
+                        return;
+                    }
                     if (job.FunctionStack.Count == 0)
                     {
+                        currentJobCount += 1;
                         jobList.RemoveAt(i);
-                        containerCount -= 1;
                         break;
                     }
 
@@ -540,19 +573,11 @@ namespace Unity.AutoLOD
                             break;
                         }
 
-                        if (func.Current is IEnumerator)
+                        var enumerator = func.Current as IEnumerator;
+                        if (enumerator != null)
                         {
-                            job.FunctionStack.Push(func.Current as IEnumerator);
+                            job.FunctionStack.Push(enumerator);
                         }
-                        else if (func.Current is MoveToEnd)
-                        {
-                            jobList.RemoveAt(i);
-                            jobList.Add(job);
-                            containerCount -= 1;
-                            break;
-                        }
-                        
-                        
                     }
                     else
                     {
@@ -565,6 +590,20 @@ namespace Unity.AutoLOD
             if (jobList.Count == 0)
             {
                 m_JobContainer.Remove(firstItem.Key);
+                currentProgress += 1;
+
+                if (m_JobContainer.Count > 0)
+                {
+                    currentJobCount = 0;
+                    maxJobCount = m_JobContainer.First().Value.Count + 1;
+                }
+                else
+                {
+                    //Do not be set zero.
+                    //Avoid to divide by zero.
+                    currentJobCount = 1;
+                    maxJobCount = 1;
+                }
             }
         }
 
@@ -594,7 +633,6 @@ namespace Unity.AutoLOD
                 
                 yield break;
             }
-
 
             float quality = Mathf.Pow(groupOptions.VolumePolygonRatio, depth + 1);
             int expectTriangleCount = (int) (quality * mesh.triangles.Length) / 3;
@@ -640,7 +678,7 @@ namespace Unity.AutoLOD
             float size = Mathf.Max(bounds.extents.x, Mathf.Max(bounds.extents.y, bounds.extents.z));
             int depth = 0;
 
-            if (size > m_Options.VolumeSize)
+            while (size > m_Options.VolumeSize)
             {
                 depth += 1;
                 size /= 2.0f;

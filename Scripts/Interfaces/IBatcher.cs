@@ -9,7 +9,7 @@ namespace Unity.AutoLOD
         /// Combine children renderers of this GameObject (NOTE: Runs as a coroutine)
         /// </summary>
         /// <param name="go">GameObject hierarchy to batch</param>
-        IEnumerator Batch(GameObject hlodRoot);
+        IEnumerator Batch(GameObject hlodRoot, System.Action<float> progress);
 
         IBatcherOption GetBatcherOption();
     }

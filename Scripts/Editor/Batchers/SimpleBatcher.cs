@@ -53,14 +53,17 @@ namespace Unity.AutoLOD
             return null;
         }
 
-        public IEnumerator Batch(GameObject hlodRoot)
+        public IEnumerator Batch(GameObject hlodRoot, System.Action<float> progress)
         {
             yield return PackTextures(hlodRoot);
 
             Dictionary<Texture2D, Material> createdMaterials = new Dictionary<Texture2D, Material>();
 
-            foreach (Transform child in hlodRoot.transform)
+
+            for(int childIndex = 0; childIndex < hlodRoot.transform.childCount; ++childIndex)
             {
+                var child = hlodRoot.transform.GetChild(childIndex);
+
                 var go = child.gameObject;
                 var renderers = go.GetComponentsInChildren<Renderer>();
                 var materials = new HashSet<Material>(renderers.SelectMany(r => r.sharedMaterials));
@@ -187,7 +190,7 @@ namespace Unity.AutoLOD
                 combinedMesh.RecalculateBounds();
                 var meshFilter = go.AddComponent<MeshFilter>();
                 meshFilter.sharedMesh = combinedMesh;
-                
+
                 for (int i = 0; i < meshFilters.Length; i++)
                 {
                     Object.DestroyImmediate(meshFilters[i].gameObject);
@@ -217,13 +220,18 @@ namespace Unity.AutoLOD
                 {
                     material = createdMaterials[atlas.textureAtlas];
                 }
-                
+
                 meshRenderer.sharedMaterial = material;
 
                 string assetName = hlodRoot.name + "_" + go.name;
-                                
-                AssetDatabase.CreateAsset(combinedMesh, "Assets/" + SceneLOD.GetSceneLODPath() + assetName + ".asset");
+
+                AssetDatabase.CreateAsset(combinedMesh,
+                    "Assets/" + SceneLOD.GetSceneLODPath() + assetName + ".asset");
                 AssetDatabase.SaveAssets();
+
+                if (progress != null)
+                    progress((float) childIndex / (float) hlodRoot.transform.childCount);
+                yield return null;
             }
         }
 

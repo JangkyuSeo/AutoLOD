@@ -254,6 +254,8 @@ namespace Unity.AutoLOD
                 {
                     SceneLODCreator.instance.CancelCreating();
                 }
+
+                DrawProgress();
             }
             else if (SceneLOD.instance.RootVolume != null)
             {
@@ -275,6 +277,32 @@ namespace Unity.AutoLOD
                 }
             }
             EditorGUILayout.Space();
+        }
+
+        private void DrawProgress()
+        {
+            var creator = SceneLODCreator.instance;
+            
+            float job = (float)creator.GetCurrentJobCount() / (float)creator.GetMaxJobCount();
+            float progress = (float) creator.GetCurrentProgress() / (float) creator.GetMaxProgress();
+
+            EditorGUILayout.Space();
+
+            var jobRect = GUILayoutUtility.GetRect(0, 20.0f, GUILayout.ExpandWidth(true));
+            jobRect.x += 10.0f;
+            jobRect.width -= 20.0f;
+
+            EditorGUI.ProgressBar(jobRect, job, job.ToString("p1"));
+            EditorGUILayout.Space();
+
+            var progressRect = GUILayoutUtility.GetRect(0, 20.0f, GUILayout.ExpandWidth(true));
+            progressRect.x += 10.0f;
+            progressRect.width -= 20.0f;
+
+            EditorGUI.ProgressBar(progressRect, progress, progress.ToString("p1"));
+            EditorGUILayout.Space();
+
+            this.Repaint();
         }
 
     }
