@@ -12,10 +12,12 @@ namespace Unity.AutoLOD
         {
             
         }
-        public IEnumerator Batch(GameObject hlodRoot)
+        public IEnumerator Batch(GameObject hlodRoot, System.Action<float> progress)
         {
-            foreach (Transform child in hlodRoot.transform)
+            //foreach (Transform child in hlodRoot.transform)
+            for(int i = 0; i < hlodRoot.transform.childCount; ++i)
             {
+                var child = hlodRoot.transform.GetChild(i);
                 var go = child.gameObject;
                 var renderers = go.GetComponentsInChildren<Renderer>();
                 foreach (var r in renderers)
@@ -25,6 +27,8 @@ namespace Unity.AutoLOD
                 }
 
                 StaticBatchingUtility.Combine(go);
+                if (progress != null)
+                    progress((float) i / (float) hlodRoot.transform.childCount);
                 yield return null;
             }
         }
