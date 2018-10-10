@@ -160,6 +160,16 @@ namespace Unity.AutoLOD.LODCache
                 if (meshes != null)
                 {
                     m_CachedMeshes[guid] = meshes;
+
+                    //Make sure the cache is valid.
+                    for (int i = 0; i < meshes.Meshes.Count; ++i)
+                    {
+                        if (meshes.Meshes[i].Mesh == null || meshes.Meshes[i].Mesh.triangles.Length == 0)
+                        {
+                            meshes.Meshes.RemoveAt(i);
+                            i -= 1;
+                        }
+                    }
                 }
                 else
                 {
