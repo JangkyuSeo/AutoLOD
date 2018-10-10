@@ -597,7 +597,7 @@ namespace Unity.AutoLOD
 
 
             float quality = Mathf.Pow(groupOptions.VolumePolygonRatio, depth + 1);
-            int expectTriangleCount = (int) (quality * mesh.triangles.Length);
+            int expectTriangleCount = (int) (quality * mesh.triangles.Length) / 3;
 
             //It need for avoid crash when simplificate in Simplygon
             //Mesh has less vertices, it crashed when save prefab.
