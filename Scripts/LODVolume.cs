@@ -6,7 +6,6 @@ using System.IO;
 using System.Linq;
 using Unity.AutoLOD;
 using Unity.AutoLOD.Utilities;
-using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Object = System.Object;
@@ -14,9 +13,12 @@ using Object = System.Object;
 [RequiresLayer(HLODLayer)]
 public class LODVolume : MonoBehaviour
 {
+#if UNITY_EDITOR
     public const string HLODLayer = "HLOD";
     public static Type meshSimplifierType { set; get; }
     public static float meshSimplificationRatio { set; get; }
+    public static bool ShowVolumeBounds { set; get; }
+#endif
 
     [Serializable]
     public class LODVolumeGroup
@@ -160,7 +162,7 @@ public class LODVolume : MonoBehaviour
 #if UNITY_EDITOR
     void OnDrawGizmos()
     {
-        if (Settings.ShowVolumeBounds)
+        if (ShowVolumeBounds)
         {
             var depth = GetDepth(transform);
             DrawGizmos(Mathf.Max(1f - Mathf.Pow(0.9f, depth), 0.2f), GetDepthColor(depth));
@@ -170,7 +172,7 @@ public class LODVolume : MonoBehaviour
 
     void OnDrawGizmosSelected()
     {
-        if (Selection.activeGameObject == gameObject)
+        if (UnityEditor.Selection.activeGameObject == gameObject)
             DrawGizmos(1f, Color.magenta);
     }
 
@@ -219,7 +221,7 @@ public class LODVolume : MonoBehaviour
                     var mf = mr.GetComponent<MeshFilter>();
                     var sharedMesh = mf.sharedMesh;
 
-                    var lodTransform = EditorUtility.CreateGameObjectWithHideFlags(string.Format("{0} LOD{1}", sharedMesh.name, l),
+                    var lodTransform = UnityEditor.EditorUtility.CreateGameObjectWithHideFlags(string.Format("{0} LOD{1}", sharedMesh.name, l),
                         k_DefaultHideFlags, typeof(MeshFilter), typeof(MeshRenderer)).transform;
                     lodTransform.gameObject.layer = hlodLayer;
                     lodTransform.SetPositionAndRotation(mf.transform.position, mf.transform.rotation);
@@ -231,8 +233,8 @@ public class LODVolume : MonoBehaviour
 
                     lodRenderers.Add(lodRenderer);
 
-                    EditorUtility.CopySerialized(mf, lodMF);
-                    EditorUtility.CopySerialized(mf.GetComponent<MeshRenderer>(), lodRenderer);
+                    UnityEditor.EditorUtility.CopySerialized(mf, lodMF);
+                    UnityEditor.EditorUtility.CopySerialized(mf.GetComponent<MeshRenderer>(), lodRenderer);
 
                     var simplifiedMesh = new Mesh();
                     simplifiedMesh.name = sharedMesh.name + string.Format(" LOD{0}", l);
@@ -272,13 +274,13 @@ public class LODVolume : MonoBehaviour
             lodGroup.ForceLOD(-1);
 
 #if UNITY_2018_2_OR_NEWER
-            var prefab = PrefabUtility.GetCorrespondingObjectFromSource(go);
+            var prefab = UnityEditor.PrefabUtility.GetCorrespondingObjectFromSource(go);
 #else
-            var prefab = PrefabUtility.GetPrefabParent(go);
+            var prefab = UnityEditor.PrefabUtility.GetPrefabParent(go);
 #endif
             if (prefab)
             {
-                var assetPath = AssetDatabase.GetAssetPath(prefab);
+                var assetPath = UnityEditor.AssetDatabase.GetAssetPath(prefab);
                 var pathPrefix = Path.GetDirectoryName(assetPath) + Path.DirectorySeparatorChar + Path.GetFileNameWithoutExtension(assetPath);
                 var lodsAssetPath = pathPrefix + "_lods.asset";
                 ObjectUtils.CreateAssetFromObjects(meshes.ToArray(), lodsAssetPath);
