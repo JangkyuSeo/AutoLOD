@@ -208,7 +208,7 @@ namespace Unity.AutoLOD
             var cameraTransform = camera.transform;
             var cameraPosition = cameraTransform.position;
 
-            m_RootVolume.UpdateLODGroup(camera, cameraPosition);
+            m_RootVolume.UpdateLODGroup(camera, cameraPosition, false);
         }
 
 #region Menu
