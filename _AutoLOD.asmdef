@@ -3,7 +3,9 @@
     "references": [],
     "optionalUnityReferences": [],
     "includePlatforms": [
+        "Android",
         "Editor",
+        "iOS",
         "LinuxStandalone32",
         "LinuxStandalone64",
         "LinuxStandaloneUniversal",
