@@ -115,6 +115,7 @@ namespace Unity.AutoLOD
 
             LODVolume.meshSimplifierType = meshSimplifierType;
             LODVolume.meshSimplificationRatio = meshSimplificationRatio;
+            LODVolume.ShowVolumeBounds = Settings.ShowVolumeBounds;
 
             ModelImporterLODGenerator.meshSimplifierType = meshSimplifierType;
             ModelImporterLODGenerator.meshSimplificationRatio = meshSimplificationRatio;

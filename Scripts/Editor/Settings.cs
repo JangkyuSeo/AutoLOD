@@ -14,6 +14,7 @@ namespace Unity.AutoLOD
             set
             {
                 EditorPrefs.SetBool(k_ShowVolumeBounds, value);
+                LODVolume.ShowVolumeBounds = value;
             }
             get
             {
