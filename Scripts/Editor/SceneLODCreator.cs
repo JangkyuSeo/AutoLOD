@@ -59,29 +59,38 @@ namespace Unity.AutoLOD
             public Type BatcherType;
             public IBatcher Batcher;
 
-            private string groupName;
+            public int LODTriangleMin = 10;
+            public int LODTriangleMax = 500;
+
+            public string Name { private set; get; }
 
             public GroupOptions(string name)
             {
-                groupName = name;
+                Name = name;
             }
 
             public void SaveToEditorPrefs()
             {
-                EditorPrefs.SetBool(k_OptionStr + groupName + ".VolumeSimplification", VolumeSimplification);
-                EditorPrefs.SetFloat(k_OptionStr + groupName + ".VolumePolygonRatio", VolumePolygonRatio);
+                EditorPrefs.SetBool(k_OptionStr + Name + ".VolumeSimplification", VolumeSimplification);
+                EditorPrefs.SetFloat(k_OptionStr + Name + ".VolumePolygonRatio", VolumePolygonRatio);
                 if ( BatcherType != null)
-                    EditorPrefs.SetString(k_OptionStr + groupName + ".BatcherType", BatcherType.AssemblyQualifiedName);
+                    EditorPrefs.SetString(k_OptionStr + Name + ".BatcherType", BatcherType.AssemblyQualifiedName);
+
+                EditorPrefs.SetInt(k_OptionStr + Name + "LODTriangleMin", LODTriangleMin);
+                EditorPrefs.SetInt(k_OptionStr + Name + "LODTriangleMax", LODTriangleMax);
                 
             }
 
             public void LoadFromEditorPrefs()
             {
-                VolumeSimplification = EditorPrefs.GetBool(k_OptionStr + groupName + ".VolumeSimplification", true);
-                VolumePolygonRatio = EditorPrefs.GetFloat(k_OptionStr + groupName + ".VolumePolygonRatio", 0.5f);
-                string batcherTypeStr = EditorPrefs.GetString(k_OptionStr + groupName + ".BatcherType");
+                VolumeSimplification = EditorPrefs.GetBool(k_OptionStr + Name + ".VolumeSimplification", true);
+                VolumePolygonRatio = EditorPrefs.GetFloat(k_OptionStr + Name + ".VolumePolygonRatio", 0.5f);
+                string batcherTypeStr = EditorPrefs.GetString(k_OptionStr + Name + ".BatcherType");
                 BatcherType = Type.GetType(batcherTypeStr);
-                Batcher = (IBatcher) Activator.CreateInstance(BatcherType, groupName);
+                Batcher = (IBatcher) Activator.CreateInstance(BatcherType, Name);
+
+                LODTriangleMin = EditorPrefs.GetInt(k_OptionStr + Name + "LODTriangleMin", 10);
+                LODTriangleMax = EditorPrefs.GetInt(k_OptionStr + Name + "LODTriangleMax", 500);
             }
         }
 
@@ -634,12 +643,17 @@ namespace Unity.AutoLOD
                 yield break;
             }
 
-            float quality = Mathf.Pow(groupOptions.VolumePolygonRatio, depth + 1);
+            //if the mesh has under of max triangle count, a max quality should be one
+            //otherwise, it should be a rate of a max triangle.
+            int triangleCount = Math.Max(mesh.triangles.Length / 3, groupOptions.LODTriangleMax);
+            float maxQuality = (float)groupOptions.LODTriangleMax / (float)triangleCount;
+
+            float quality = maxQuality * Mathf.Pow(groupOptions.VolumePolygonRatio, depth + 1);
             int expectTriangleCount = (int) (quality * mesh.triangles.Length) / 3;
 
             //It need for avoid crash when simplificate in Simplygon
             //Mesh has less vertices, it crashed when save prefab.
-            if (expectTriangleCount < 10)
+            if (expectTriangleCount < groupOptions.LODTriangleMin)
             {
                 yield return GetLODMesh(groupName, renderer, depth -1, returnCallback);
                 yield break;

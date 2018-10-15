@@ -116,17 +116,9 @@ namespace Unity.AutoLOD
         void DrawGenerate(bool rootExists)
         {
            
-
-            //if (currentBatcher == null)
-            //{
-            //    EditorGUILayout.HelpBox(Styles.NoBatcherMsg);
-            //    return;
-            //}
-
             EditorGUI.BeginChangeCheck();
 
             GUI.enabled = rootExists && !SceneLODCreator.instance.IsCreating();
-
             
             DrawCommon();
             DrawGroups();
@@ -172,7 +164,7 @@ namespace Unity.AutoLOD
                 {
                     EditorGUI.indentLevel += 1;
 
-                    DrawBatcher(groupName, pair.Value);
+                    DrawBatcher(pair.Value);
                     DrawSimplification(pair.Value);
 
                     EditorGUI.indentLevel -= 1;
@@ -191,14 +183,14 @@ namespace Unity.AutoLOD
             EditorGUILayout.Space();
 
         }
-        void DrawBatcher(string groupName, SceneLODCreator.GroupOptions groupOptions)
+        void DrawBatcher(SceneLODCreator.GroupOptions groupOptions)
         {
             if (groupOptions.BatcherType == null)
             {
                 if (batcherTypes.Length > 0)
                 {
                     groupOptions.BatcherType = batcherTypes[0];
-                    groupOptions.Batcher = (IBatcher) Activator.CreateInstance(groupOptions.BatcherType, groupName);
+                    groupOptions.Batcher = (IBatcher) Activator.CreateInstance(groupOptions.BatcherType, groupOptions.Name);
                     GUI.changed = true; //< for store value.
                 }
             }
@@ -209,7 +201,7 @@ namespace Unity.AutoLOD
                 if (batcherIndex != newIndex)
                 {
                     groupOptions.BatcherType = batcherTypes[newIndex];
-                    groupOptions.Batcher = (IBatcher) Activator.CreateInstance(groupOptions.BatcherType, groupName);
+                    groupOptions.Batcher = (IBatcher) Activator.CreateInstance(groupOptions.BatcherType, groupOptions.Name);
                     //we don't need GUI.changed here. 
                     //Already set a value when popup index was changed.
                 }
@@ -235,10 +227,23 @@ namespace Unity.AutoLOD
             {
                 EditorGUI.indentLevel += 1;
                 groupOptions.VolumePolygonRatio = EditorGUILayout.Slider(Styles.PolygonRatio, groupOptions.VolumePolygonRatio, 0.0f, 1.0f);
+
+                DrawTiangleRange(groupOptions);
                 EditorGUI.indentLevel -= 1;
             }
 
             EditorGUILayout.Space();
+        }
+
+        private void DrawTiangleRange(SceneLODCreator.GroupOptions groupOptions)
+        {
+            EditorGUILayout.PrefixLabel("LOD Trangle range");
+            EditorGUI.indentLevel += 1;
+
+            groupOptions.LODTriangleMin = EditorGUILayout.IntSlider("Min", groupOptions.LODTriangleMin, 10, 100);
+            groupOptions.LODTriangleMax = EditorGUILayout.IntSlider("Max", groupOptions.LODTriangleMax, 10, 5000);
+
+            EditorGUI.indentLevel -= 1;
         }
 
 
