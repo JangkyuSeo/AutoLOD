@@ -647,17 +647,10 @@ namespace Unity.AutoLOD
             //otherwise, it should be a rate of a max triangle.
             int triangleCount = Math.Max(mesh.triangles.Length / 3, groupOptions.LODTriangleMax);
             float maxQuality = (float)groupOptions.LODTriangleMax / (float)triangleCount;
+            float minQuality = (float) groupOptions.LODTriangleMin / (float) triangleCount;
 
             float quality = maxQuality * Mathf.Pow(groupOptions.VolumePolygonRatio, depth + 1);
-            int expectTriangleCount = (int) (quality * mesh.triangles.Length) / 3;
-
-            //It need for avoid crash when simplificate in Simplygon
-            //Mesh has less vertices, it crashed when save prefab.
-            if (expectTriangleCount < groupOptions.LODTriangleMin)
-            {
-                yield return GetLODMesh(groupName, renderer, depth -1, returnCallback);
-                yield break;
-            }
+            quality = Mathf.Min(maxQuality, Mathf.Max(minQuality, quality));
 
             Mesh simplifiedMesh = Cache.GetLODMesh(mesh, quality);
 
