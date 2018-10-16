@@ -28,6 +28,10 @@ namespace Unity.AutoLOD
 
             public readonly GUIContent VolumeSimplification = EditorGUIUtility.TrTextContent("Volume Simplification");
             public readonly GUIContent PolygonRatio = EditorGUIUtility.TrTextContent("Polygon Ratio");
+
+            public readonly GUIContent LODTrangleRange = EditorGUIUtility.TrTextContent("LOD Trangle Range");
+            public readonly GUIContent LODTrangleMin = EditorGUIUtility.TrTextContent("Min");
+            public readonly GUIContent LODTrangleMax = EditorGUIUtility.TrTextContent("Max");
             
 
             public GUIStyles()
@@ -52,6 +56,8 @@ namespace Unity.AutoLOD
 
         private SerializedObject serializedObject;
         private LODSlider slider;
+
+        private Vector2 windowScrollPos = Vector2.zero;
 
         public GenerateSceneLODWindow()
         {
@@ -97,7 +103,7 @@ namespace Unity.AutoLOD
                 Initialize(); 
             }
             serializedObject.Update();
-            
+            windowScrollPos = EditorGUILayout.BeginScrollView(windowScrollPos);
             if (SceneLOD.instance.RootVolume != null)
             {
                 GUI.enabled = false;
@@ -108,6 +114,7 @@ namespace Unity.AutoLOD
             {
                 DrawGenerate(true);
             }
+            EditorGUILayout.EndScrollView();
 
             DrawButtons();
             
@@ -119,10 +126,8 @@ namespace Unity.AutoLOD
             EditorGUI.BeginChangeCheck();
 
             GUI.enabled = rootExists && !SceneLODCreator.instance.IsCreating();
-            
             DrawCommon();
-            DrawGroups();
-            
+            DrawGroups();            
 
             if (serializedObject.ApplyModifiedProperties() || EditorGUI.EndChangeCheck())
             {
@@ -237,11 +242,11 @@ namespace Unity.AutoLOD
 
         private void DrawTiangleRange(SceneLODCreator.GroupOptions groupOptions)
         {
-            EditorGUILayout.PrefixLabel("LOD Trangle range");
+            EditorGUILayout.PrefixLabel(Styles.LODTrangleRange);
             EditorGUI.indentLevel += 1;
 
-            groupOptions.LODTriangleMin = EditorGUILayout.IntSlider("Min", groupOptions.LODTriangleMin, 10, 100);
-            groupOptions.LODTriangleMax = EditorGUILayout.IntSlider("Max", groupOptions.LODTriangleMax, 10, 5000);
+            groupOptions.LODTriangleMin = EditorGUILayout.IntSlider(Styles.LODTrangleMin, groupOptions.LODTriangleMin, 10, 100);
+            groupOptions.LODTriangleMax = EditorGUILayout.IntSlider(Styles.LODTrangleMax, groupOptions.LODTriangleMax, 10, 5000);
 
             EditorGUI.indentLevel -= 1;
         }
