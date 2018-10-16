@@ -339,6 +339,10 @@ namespace Unity.AutoLOD
 
             lod.renderers = lodRenderers.ToArray();
             lodGroup.SetLODs(new LOD[] {detailLOD, lod});
+
+            //bounds is cuboid.
+            //it has the same size each axis.
+            lodGroup.size = volume.Bounds.size.x;
             yield break;
         }
 
