@@ -171,6 +171,7 @@ namespace Unity.AutoLOD
 
                     DrawBatcher(pair.Value);
                     DrawSimplification(pair.Value);
+                    DrawThreshold(pair.Value);
 
                     EditorGUI.indentLevel -= 1;
                 }
@@ -249,6 +250,10 @@ namespace Unity.AutoLOD
             groupOptions.LODTriangleMax = EditorGUILayout.IntSlider(Styles.LODTrangleMax, groupOptions.LODTriangleMax, 10, 5000);
 
             EditorGUI.indentLevel -= 1;
+        }
+        private void DrawThreshold(SceneLODCreator.GroupOptions groupOptions)
+        {
+            groupOptions.LODThresholdSize = EditorGUILayout.FloatField("LOD Threshold size", groupOptions.LODThresholdSize);
         }
 
 

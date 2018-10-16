@@ -59,6 +59,8 @@ namespace Unity.AutoLOD
             public Type BatcherType;
             public IBatcher Batcher;
 
+            public float LODThresholdSize = 5.0f;
+
             public int LODTriangleMin = 10;
             public int LODTriangleMax = 500;
 
@@ -76,6 +78,8 @@ namespace Unity.AutoLOD
                 if ( BatcherType != null)
                     EditorPrefs.SetString(k_OptionStr + Name + ".BatcherType", BatcherType.AssemblyQualifiedName);
 
+                EditorPrefs.SetFloat(k_OptionStr + Name + "LODThresholdSize", LODThresholdSize);
+
                 EditorPrefs.SetInt(k_OptionStr + Name + "LODTriangleMin", LODTriangleMin);
                 EditorPrefs.SetInt(k_OptionStr + Name + "LODTriangleMax", LODTriangleMax);
                 
@@ -88,6 +92,8 @@ namespace Unity.AutoLOD
                 string batcherTypeStr = EditorPrefs.GetString(k_OptionStr + Name + ".BatcherType");
                 BatcherType = Type.GetType(batcherTypeStr);
                 Batcher = (IBatcher) Activator.CreateInstance(BatcherType, Name);
+
+                LODThresholdSize = EditorPrefs.GetFloat(k_OptionStr + Name + "LODThresholdSize", 5.0f);
 
                 LODTriangleMin = EditorPrefs.GetInt(k_OptionStr + Name + "LODTriangleMin", 10);
                 LODTriangleMax = EditorPrefs.GetInt(k_OptionStr + Name + "LODTriangleMax", 500);
@@ -333,6 +339,10 @@ namespace Unity.AutoLOD
 
             lod.renderers = lodRenderers.ToArray();
             lodGroup.SetLODs(new LOD[] {detailLOD, lod});
+
+            //bounds is cuboid.
+            //it has the same size each axis.
+            lodGroup.size = volume.Bounds.size.x;
             yield break;
         }
 
@@ -341,11 +351,16 @@ namespace Unity.AutoLOD
             List<Renderer> hlodRenderers = new List<Renderer>();
             int depth = GetDepth(volumeBounds);
 
+            var groupOptions = m_Options.GroupOptions[volumeGroup.GroupName];
+
             foreach (var group in lodGroups)
             {
                 var lastLod = group.GetLODs().Last();
                 foreach (var lr in lastLod.renderers)
                 {
+                    float max = Mathf.Max(Mathf.Max(lr.bounds.size.x, lr.bounds.size.y), lr.bounds.size.z);
+                    if (max < groupOptions.LODThresholdSize)
+                        continue;
 
                     if (lr && lr.GetComponent<MeshFilter>())
                     {
