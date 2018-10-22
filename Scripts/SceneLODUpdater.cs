@@ -88,10 +88,76 @@ namespace Unity.AutoLOD
             }
         }
 
+        class FrustumCullHelper
+        {
+            private Vector3[] normals = new Vector3[6];
+            private float[] distances = new float[6];
+
+            public void Set(Camera camera)
+            {
+                var vp = camera.projectionMatrix * camera.worldToCameraMatrix;
+
+                normals[0].x = vp.m20 + vp.m30;
+                normals[0].y = vp.m21 + vp.m31;
+                normals[0].z = vp.m22 + vp.m32;
+                distances[0] = vp.m23 + vp.m33;
+
+                normals[1].x = -vp.m20 + vp.m30;
+                normals[1].y = -vp.m21 + vp.m31;
+                normals[1].z = -vp.m22 + vp.m32;
+                distances[1] = -vp.m23 + vp.m33;
+
+                normals[2].x = vp.m10 + vp.m30;
+                normals[2].y = vp.m11 + vp.m31;
+                normals[2].z = vp.m12 + vp.m32;
+                distances[2] = vp.m13 + vp.m33;
+
+                normals[3].x = -vp.m10 + vp.m30;
+                normals[3].y = -vp.m11 + vp.m31;
+                normals[3].z = -vp.m12 + vp.m32;
+                distances[3] = -vp.m13 + vp.m33;
+
+                normals[4].x = vp.m00 + vp.m30;
+                normals[4].y = vp.m01 + vp.m31;
+                normals[4].z = vp.m02 + vp.m32;
+                distances[4] = vp.m03 + vp.m33;
+
+                normals[5].x = -vp.m00 + vp.m30;
+                normals[5].y = -vp.m01 + vp.m31;
+                normals[5].z = -vp.m02 + vp.m32;
+                distances[5] = -vp.m03 + vp.m33;
+
+                //normalize
+                for (int i = 0; i < 6; ++i)
+                {
+                    float len = Vector3.Magnitude(normals[i]);
+                    normals[i] = normals[i] / len;
+                    distances[i] = distances[i] / len;
+                }
+            }
+
+            public bool IsOutside(Vector3 position, float radius)
+            {
+                for (int pi = 0; pi < 6; ++pi)
+                {
+                    float planeDistance = Vector3.Dot(normals[pi], position) + distances[pi];
+
+                    if (planeDistance + radius < 0.0f)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
+        }
+
         struct VolumeBounds
         {
             public Vector3 Center;
             public float Size;        //< volume is cuboid. so, every axis is the same size.
+            public float Radius;
         }
 
         struct VolumeRenderer
@@ -195,9 +261,9 @@ namespace Unity.AutoLOD
                 if (current.VolumeGroups.Count == 0)
                     continue;
 
-
                 bounds.Center = current.Bounds.center;
                 bounds.Size = current.Bounds.size.x;
+                bounds.Radius = current.Bounds.extents.magnitude;
 
                 boundsList.Add(bounds);
 
@@ -254,11 +320,14 @@ namespace Unity.AutoLOD
                 m_ActiveVolumes.Add(0);
         }
 
+        private FrustumCullHelper cullHelper = new FrustumCullHelper();
         private void OnPreCull(Camera cam)
         {
             var cameraTransform = cam.transform;
             var cameraPosition = cameraTransform.position;
 
+            cullHelper.Set(cam);
+            
             float preRelative = 0.0f;
             if (cam.orthographic)
             {
@@ -280,6 +349,11 @@ namespace Unity.AutoLOD
                 int index = m_ActiveVolumes[i];
                 var bounds = m_Bounds[index];
                 var renderer = m_Renderers[index];
+
+                if (cullHelper.IsOutside(bounds.Center, bounds.Radius))
+                {
+                    continue;
+                }
 
                 float distance = 1.0f;
                 if ( cam.orthographic == false)
