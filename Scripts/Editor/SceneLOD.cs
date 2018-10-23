@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using JetBrains.Annotations;
 using Unity.AutoLOD.Utilities;
 using UnityEditor;
 using UnityEngine;
@@ -129,8 +128,6 @@ namespace Unity.AutoLOD
         }
         
 
-
-        [CanBeNull]
         IEnumerator SetLODUpdater()
         {
             if (m_Updater)
