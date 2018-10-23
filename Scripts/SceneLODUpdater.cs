@@ -1,4 +1,4 @@
-﻿using System.Collections;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -6,63 +6,54 @@ namespace Unity.AutoLOD
 {
     public class SceneLODUpdater : MonoBehaviour
     {
-        [SerializeField]
-        private LODVolume m_RootLODVolume;
-
-        public LODVolume RootLODVolume
+        //Removed interface because unity does not support interface serialize.
+        [Serializable]
+        class LODGroupRendererProxy
         {
-            set { m_RootLODVolume = value; }
-            get { return m_RootLODVolume; }
-        }
-
-
-        interface IRendererProxy
-        {
-            void Initialize();
-            void SetEnable(bool enable);
-        }
-
-        class LODGroupRendererProxy : IRendererProxy
-        {
+            [SerializeField]
             private LODGroup m_Group;
 
             public LODGroupRendererProxy(LODGroup group)
             {
                 m_Group = group;
-                m_Group.SetEnabled(true);
+                if (m_Group != null)
+                    m_Group.SetEnabled(true);
             }
 
             public void Initialize()
             {
-                m_Group.SetEnabled(true);
+                if (m_Group != null)
+                    m_Group.SetEnabled(true);
             }
             public void SetEnable(bool enable)
             {
-                m_Group.SetEnabled(enable);
+                if (m_Group != null)
+                    m_Group.SetEnabled(enable);
             }
         }
 
-        class VolumeRendererProxy : IRendererProxy
+        [Serializable]
+        class VolumeRendererProxy
         {
-            private SceneLODUpdater m_Updater;
+            [SerializeField]
             private int m_Index;
+
+            private SceneLODUpdater m_Updater;
             private bool? m_LastState;
-            public VolumeRendererProxy(SceneLODUpdater updater, int index)
+            public VolumeRendererProxy(int index)
             {
-                m_Updater = updater;
                 m_Index = index;
                 
             }
-            public void Initialize()
+            public void Initialize(SceneLODUpdater updater)
             {
+                m_Updater = updater;
                 m_LastState = null;
             }
             public void SetEnable(bool enable)
             {
                 if (m_LastState == enable)
                     return;
-
-                
 
                 if (enable == true)
                 {
@@ -76,9 +67,13 @@ namespace Unity.AutoLOD
                         renderer.LODMeshes[li].enabled = false;
                     }
 
-                    for (int ri = 0; ri < renderer.Renderers.Count; ++ri)
+                    for (int li = 0; li < renderer.LODGroups.Count; ++li)
                     {
-                        renderer.Renderers[ri].SetEnable(false);
+                        renderer.LODGroups[li].SetEnable(false);
+                    }
+                    for (int vi = 0; vi < renderer.Volumes.Count; ++vi)
+                    {
+                        renderer.Volumes[vi].SetEnable(false);
                     }
                     m_Updater.m_ActiveVolumes.Remove(m_Index);
                     
@@ -127,7 +122,6 @@ namespace Unity.AutoLOD
                 normals[5].z = -vp.m02 + vp.m32;
                 distances[5] = -vp.m03 + vp.m33;
 
-                //normalize
                 for (int i = 0; i < 6; ++i)
                 {
                     float len = Vector3.Magnitude(normals[i]);
@@ -153,6 +147,7 @@ namespace Unity.AutoLOD
 
         }
 
+        [Serializable]
         struct VolumeBounds
         {
             public Vector3 Center;
@@ -160,27 +155,36 @@ namespace Unity.AutoLOD
             public float Radius;
         }
 
+        [Serializable]
         struct VolumeRenderer
         {
-            public List<IRendererProxy> Renderers;
+            public List<LODGroupRendererProxy> LODGroups;
+            public List<VolumeRendererProxy> Volumes;
+
             public List<Renderer> LODMeshes;
         }
 
-        //private NativeArray<VolumeBounds> m_Bounds;
+        [SerializeField]
+        [HideInInspector]
         private List<VolumeBounds> m_Bounds;
+        [SerializeField]
+        [HideInInspector]
         private List<VolumeRenderer> m_Renderers;
 
         private LinkedList<int> m_ActiveVolumes = new LinkedList<int>();
 
-        void Initialize()
+        void ResetLODGroups()
         {
-            m_RootLODVolume.ResetLODGroup();
             for (int i = 0; i < m_Renderers.Count; ++i)
             {
                 var renderer = m_Renderers[i];
-                for (int ri = 0; ri < renderer.Renderers.Count; ++ri)
+                for (int li = 0; li < renderer.LODGroups.Count; ++li)
                 {
-                    renderer.Renderers[ri].Initialize();
+                    renderer.LODGroups[li].Initialize();
+                }
+                for (int vi = 0; vi < renderer.Volumes.Count; ++vi)
+                {
+                    renderer.Volumes[vi].Initialize(this);
                 }
 
                 for (int mi = 0; mi < renderer.LODMeshes.Count; ++mi)
@@ -194,48 +198,27 @@ namespace Unity.AutoLOD
                 m_ActiveVolumes.AddLast(0);
         }
 #region UnityEvents
-        void Awake()
-        {            
-            if (m_RootLODVolume != null)
-            {
-                Build();
-            }
-        }
 
-        void OnDestroy()
+        void Start()
         {
-        }
-
-        IEnumerator Start()
-        {
-            yield return new WaitForEndOfFrame();
-            Initialize();
         }
 
         void OnEnable()
         {
             Camera.onPreCull += OnPreCull;
-            if (m_RootLODVolume != null)
-            {
-                Initialize();
-            }
-
+            ResetLODGroups();
         }
 
         void OnDisable()
         {
             Camera.onPreCull -= OnPreCull;
-            if (m_RootLODVolume != null)
-            {
-                m_RootLODVolume.ResetLODGroup();
-            }
-
+            ResetLODGroups();
         }
 #endregion
 
-        public void Build()
+        public void Build(LODVolume rootLODVolume)
         {
-            if (m_RootLODVolume == null)
+            if (rootLODVolume== null)
             {
                 Debug.LogError("SceneLODUpdate build failed. RootLODVolume is null.");
                 return;
@@ -248,7 +231,7 @@ namespace Unity.AutoLOD
             Queue<LODVolume> treeTrevelQueue = new Queue<LODVolume>();
             Queue<int> parentIndexQueue = new Queue<int>();
 
-            treeTrevelQueue.Enqueue(m_RootLODVolume);
+            treeTrevelQueue.Enqueue(rootLODVolume);
             parentIndexQueue.Enqueue(-1);
 
             while (treeTrevelQueue.Count > 0)
@@ -270,7 +253,9 @@ namespace Unity.AutoLOD
 
                 VolumeRenderer renderer;
                 renderer.LODMeshes = new List<Renderer>();
-                renderer.Renderers = new List<IRendererProxy>();
+                renderer.LODGroups = new List<LODGroupRendererProxy>();
+                renderer.Volumes = new List<VolumeRendererProxy>();
+                
 
                 LODGroup lodGroup = current.GetComponent<LODGroup>();
                 if (lodGroup != null)
@@ -293,7 +278,7 @@ namespace Unity.AutoLOD
                         var volumeGroup = current.VolumeGroups[vi];
                         for (int gi = 0; gi < volumeGroup.LODGroups.Count; ++gi)
                         {
-                            renderer.Renderers.Add(new LODGroupRendererProxy(volumeGroup.LODGroups[gi]));
+                            renderer.LODGroups.Add(new LODGroupRendererProxy(volumeGroup.LODGroups[gi]));
                         }
                     }
                 }
@@ -304,7 +289,7 @@ namespace Unity.AutoLOD
                 if (parentIndex != -1)
                 {
                     var parentRenderer = rendererList[parentIndex];
-                    parentRenderer.Renderers.Add(new VolumeRendererProxy(this, currentIndex));
+                    parentRenderer.Volumes.Add(new VolumeRendererProxy( currentIndex));
                 }
 
                 for (int i = 0; i < current.ChildVolumes.Count; ++i)
@@ -367,10 +352,15 @@ namespace Unity.AutoLOD
                 {
                     renderer.LODMeshes[li].enabled = !renderDetail;
                 }
-                for (int ri = 0; ri < renderer.Renderers.Count; ++ri)
+                for (int li = 0; li < renderer.LODGroups.Count; ++li)
                 {
-                    renderer.Renderers[ri].SetEnable(renderDetail);
+                    renderer.LODGroups[li].SetEnable(renderDetail);
                 }
+                for (int vi = 0; vi < renderer.Volumes.Count; ++vi)
+                {
+                    renderer.Volumes[vi].SetEnable(renderDetail);
+                }
+
             }
         }        
     }

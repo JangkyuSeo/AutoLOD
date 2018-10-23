@@ -114,7 +114,6 @@ namespace Unity.AutoLOD
 
         private GameObject m_HLODRootContainer;
         private Dictionary<string, GameObject> m_GroupHLODRootContainer;
-        private LODVolume m_RootVolume;
 
         private int currentJobCount = 0;
         private int maxJobCount = 0;
@@ -460,23 +459,34 @@ namespace Unity.AutoLOD
                 bounds.Encapsulate(CalcBounds(lodGroupList[i]));
             }
 
-            m_RootVolume = LODVolume.Create();
-            m_RootVolume.SetLODGroups(lodGroups);
-            m_RootVolume.Bounds = bounds;
+            var rootVolume = LODVolume.Create();
+            rootVolume.SetLODGroups(lodGroups);
+            rootVolume.Bounds = bounds;
 
             m_HLODRootContainer = new GameObject(k_HLODRootContainer);
             m_HLODRootContainer.AddComponent<SceneLODUpdater>();
 
             m_GroupHLODRootContainer = new Dictionary<string, GameObject>();
 
-            StartCustomCoroutine(BuildOctree(m_RootVolume), CoroutineOrder.BuildTree);
+            StartCustomCoroutine(BuildOctree(rootVolume), CoroutineOrder.BuildTree);
             StartCustomCoroutine(BuildBatch(), CoroutineOrder.Batch);
 
             StartCustomCoroutine(EnqueueAction(finishAction), CoroutineOrder.Finish);
             StartCustomCoroutine(EnqueueAction(() =>
             {
-                if ( m_RootVolume != null )
-                    m_RootVolume.ResetLODGroup();
+                if (rootVolume != null)
+                {
+                    rootVolume.ResetLODGroup();   
+
+                    if (m_HLODRootContainer != null)
+                    {
+                        var updater = m_HLODRootContainer.GetComponent<SceneLODUpdater>();
+                        updater.Build(rootVolume);
+                        
+                        DestroyImmediate(rootVolume.gameObject);
+                    }
+                    
+                }
             }), CoroutineOrder.Finish);
 
             currentJobCount = 0;
@@ -519,14 +529,8 @@ namespace Unity.AutoLOD
 
         public void Destroy()
         {
-            if ( m_RootVolume != null )
-                m_RootVolume.ResetLODGroup();
-
             MonoBehaviourHelper.StartCoroutine(ObjectUtils.FindGameObject("HLODs",
                 root => { DestroyImmediate(root); }));
-
-            if (m_RootVolume != null)
-                DestroyImmediate(m_RootVolume.gameObject);
 
             Utilities.FileUtils.DeleteDirectory(Application.dataPath + Path.DirectorySeparatorChar + SceneLOD.GetSceneLODPath());
             AssetDatabase.Refresh();
