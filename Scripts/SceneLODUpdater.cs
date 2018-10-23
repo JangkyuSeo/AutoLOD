@@ -1,7 +1,5 @@
-﻿using System;
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
-using Unity.Collections;
 using UnityEngine;
 
 namespace Unity.AutoLOD
@@ -64,9 +62,11 @@ namespace Unity.AutoLOD
                 if (m_LastState == enable)
                     return;
 
+                
+
                 if (enable == true)
                 {
-                    m_Updater.m_ActiveVolumes.Add(m_Index);
+                    m_Updater.m_ActiveVolumes.AddLast(m_Index);
                 }
                 else
                 {
@@ -170,7 +170,7 @@ namespace Unity.AutoLOD
         private List<VolumeBounds> m_Bounds;
         private List<VolumeRenderer> m_Renderers;
 
-        private List<int> m_ActiveVolumes = new List<int>();
+        private LinkedList<int> m_ActiveVolumes = new LinkedList<int>();
 
         void Initialize()
         {
@@ -190,7 +190,8 @@ namespace Unity.AutoLOD
             }
 
             m_ActiveVolumes.Clear();
-            m_ActiveVolumes.Add(0);
+            if(m_Bounds.Count > 0)
+                m_ActiveVolumes.AddLast(0);
         }
 #region UnityEvents
         void Awake()
@@ -317,7 +318,7 @@ namespace Unity.AutoLOD
             m_Renderers = rendererList;
 
             if ( m_Bounds.Count > 0)
-                m_ActiveVolumes.Add(0);
+                m_ActiveVolumes.AddLast(0);
         }
 
         private FrustumCullHelper cullHelper = new FrustumCullHelper();
@@ -344,9 +345,9 @@ namespace Unity.AutoLOD
             //Items are added or removed in the loop.
             //That's OK because be edited item is always after current index.
             //DO NOT CHANGE this loop to foreach.
-            for (int i = 0; i < m_ActiveVolumes.Count; ++i)
+            for(var node = m_ActiveVolumes.First; node != null; node=node.Next)
             {
-                int index = m_ActiveVolumes[i];
+                int index = node.Value;
                 var bounds = m_Bounds[index];
                 var renderer = m_Renderers[index];
 
