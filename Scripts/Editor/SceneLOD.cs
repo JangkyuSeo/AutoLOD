@@ -26,12 +26,13 @@ namespace Unity.AutoLOD
 
         static bool s_HLODEnabled = true;
         static bool s_Activated;
-        
-        LODVolume m_RootVolume;
 
-        public LODVolume RootVolume
+
+        private SceneLODUpdater m_Updater;
+
+        public SceneLODUpdater Updater
         {
-            get { return m_RootVolume; }
+            get { return m_Updater; }
         }
 
         public void EnableHLOD()
@@ -91,9 +92,6 @@ namespace Unity.AutoLOD
             Dbg.Log("SceneLOD disable");
             s_Activated = false;
             RemoveCallbacks();
-
-            if (m_RootVolume != null)
-                m_RootVolume.ResetLODGroup();
         }
 
         void AddCallbacks()
@@ -122,16 +120,6 @@ namespace Unity.AutoLOD
             GUILayout.BeginArea(rect);
             GUILayout.BeginHorizontal();
 
-            if (SceneLODCreator.instance.IsCreating() == false)
-            {
-                if (m_RootVolume && GUILayout.Button(s_HLODEnabled ? "Disable HLOD" : "Enable HLOD"))
-                {
-                    s_HLODEnabled = !s_HLODEnabled;
-
-                    if (m_RootVolume != null)
-                        m_RootVolume.ResetLODGroup();
-                }
-            }
 
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
@@ -140,23 +128,15 @@ namespace Unity.AutoLOD
         }
         
 
-
-        IEnumerator SetRootLODVolume()
+        IEnumerator SetLODUpdater()
         {
-            if (m_RootVolume)
+            if (m_Updater)
             {
-                var rootVolumeTransform = m_RootVolume.transform;
-                var transformRoot = rootVolumeTransform.root;
-
-                // Handle the case where the BVH has grown
-                if (rootVolumeTransform != transformRoot)
-                    m_RootVolume = transformRoot.GetComponent<LODVolume>();
-
                 yield break;
             }
 
             // Handle initialization or the case where the BVH has shrunk
-            LODVolume lodVolume = null;
+            SceneLODUpdater updater = null;
             var scene = SceneManager.GetActiveScene();
             var rootGameObjects = scene.GetRootGameObjects();
             foreach (var go in rootGameObjects)
@@ -164,25 +144,24 @@ namespace Unity.AutoLOD
                 if (!go)
                     continue;
 
-                lodVolume = go.GetComponent<LODVolume>();
-                if (lodVolume)
+                updater = go.GetComponent<SceneLODUpdater>();
+                if (updater)
                     break;
 
                 yield return null;
             }
 
-            if (lodVolume)
+            if (updater)
             {
-                m_RootVolume = lodVolume;
-                m_RootVolume.ResetLODGroup();
+                m_Updater = updater;
             }
         }
 
         void EditorUpdate()
         {
-            if (m_RootVolume == null)
+            if (m_Updater == null)
             {
-                MonoBehaviourHelper.StartCoroutine(SetRootLODVolume());
+                MonoBehaviourHelper.StartCoroutine(SetLODUpdater());
             }
 
             if (SceneLODCreator.instance.IsCreating() == true)
@@ -201,14 +180,6 @@ namespace Unity.AutoLOD
 
             if (s_HLODEnabled == false)
                 return;
-            
-            if (!m_RootVolume)
-                return;
-
-            var cameraTransform = camera.transform;
-            var cameraPosition = cameraTransform.position;
-
-            m_RootVolume.UpdateLODGroup(camera, cameraPosition, false);
         }
 
 #region Menu

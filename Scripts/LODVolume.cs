@@ -13,8 +13,8 @@ using Object = System.Object;
 [RequiresLayer(HLODLayer)]
 public class LODVolume : MonoBehaviour
 {
-#if UNITY_EDITOR
     public const string HLODLayer = "HLOD";
+#if UNITY_EDITOR
     public static Type meshSimplifierType { set; get; }
     public static float meshSimplificationRatio { set; get; }
     public static bool ShowVolumeBounds { set; get; }
@@ -75,6 +75,11 @@ public class LODVolume : MonoBehaviour
     public List<LODVolumeGroup> VolumeGroups
     {
         get { return m_VolumeGroups; }
+    }
+
+    public List<LODVolume> ChildVolumes
+    {
+        get { return childVolumes; }
     }
 
 

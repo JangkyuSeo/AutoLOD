@@ -104,7 +104,7 @@ namespace Unity.AutoLOD
             }
             serializedObject.Update();
             windowScrollPos = EditorGUILayout.BeginScrollView(windowScrollPos);
-            if (SceneLOD.instance.RootVolume != null)
+            if (SceneLOD.instance.Updater != null)
             {
                 GUI.enabled = false;
                 DrawGenerate(false);
@@ -272,7 +272,7 @@ namespace Unity.AutoLOD
 
                 DrawProgress();
             }
-            else if (SceneLOD.instance.RootVolume != null)
+            else if (SceneLOD.instance.Updater != null)
             {
                 if (GUILayout.Button(Styles.DestoryButton) == true)
                 {
