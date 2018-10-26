@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Simplygon.Unity.EditorPlugin;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;

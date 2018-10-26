@@ -13,22 +13,57 @@ namespace Unity.AutoLOD
             [SerializeField]
             private LODGroup m_Group;
 
+            private Renderer[] m_Renderers;
+            private bool m_LastState;
             public LODGroupRendererProxy(LODGroup group)
             {
                 m_Group = group;
-                if (m_Group != null)
-                    m_Group.SetEnabled(true);
             }
 
             public void Initialize()
             {
+                m_LastState = true;
+
                 if (m_Group != null)
-                    m_Group.SetEnabled(true);
+                {
+                    if (m_Renderers == null)
+                    {
+                        List<Renderer> renderers = new List<Renderer>();
+                        var lods = m_Group.GetLODs();
+
+                        foreach (var lod in lods)
+                        {
+                            renderers.AddRange(lod.renderers);
+                        }
+
+                        m_Renderers = renderers.ToArray();
+                    }
+                    SetGroupEnabled(true);
+                }
             }
             public void SetEnable(bool enable)
             {
-                if (m_Group != null)
-                    m_Group.SetEnabled(enable);
+                //m_Group.SetEnabled(enable);
+
+                if (m_LastState == enable)
+                    return;
+
+                SetGroupEnabled(enable);
+                m_LastState = enable;
+            }
+
+
+            private void SetGroupEnabled(bool enabled)
+            {
+                if (m_Group == null || m_Renderers == null)
+                    return;
+
+                m_Group.enabled = enabled;
+
+                for (var i = 0; i < m_Renderers.Length; i++)
+                {
+                    m_Renderers[i].enabled = enabled;
+                }
             }
         }
 
@@ -43,7 +78,7 @@ namespace Unity.AutoLOD
             public VolumeRendererProxy(int index)
             {
                 m_Index = index;
-                
+
             }
             public void Initialize(SceneLODUpdater updater)
             {
@@ -76,7 +111,7 @@ namespace Unity.AutoLOD
                         renderer.Volumes[vi].SetEnable(false);
                     }
                     m_Updater.m_ActiveVolumes.Remove(m_Index);
-                    
+
                 }
 
                 m_LastState = enable;
@@ -194,10 +229,10 @@ namespace Unity.AutoLOD
             }
 
             m_ActiveVolumes.Clear();
-            if(m_Bounds.Count > 0)
+            if (m_Bounds.Count > 0)
                 m_ActiveVolumes.AddLast(0);
         }
-#region UnityEvents
+        #region UnityEvents
 
         void Start()
         {
@@ -206,6 +241,7 @@ namespace Unity.AutoLOD
         void OnEnable()
         {
             Camera.onPreCull += OnPreCull;
+            //Camera.onPreRender += OnPreCull;
             ResetLODGroups();
         }
 
@@ -214,11 +250,11 @@ namespace Unity.AutoLOD
             Camera.onPreCull -= OnPreCull;
             ResetLODGroups();
         }
-#endregion
+        #endregion
 
         public void Build(LODVolume rootLODVolume)
         {
-            if (rootLODVolume== null)
+            if (rootLODVolume == null)
             {
                 Debug.LogError("SceneLODUpdate build failed. RootLODVolume is null.");
                 return;
@@ -255,7 +291,7 @@ namespace Unity.AutoLOD
                 renderer.LODMeshes = new List<Renderer>();
                 renderer.LODGroups = new List<LODGroupRendererProxy>();
                 renderer.Volumes = new List<VolumeRendererProxy>();
-                
+
 
                 LODGroup lodGroup = current.GetComponent<LODGroup>();
                 if (lodGroup != null)
@@ -289,7 +325,7 @@ namespace Unity.AutoLOD
                 if (parentIndex != -1)
                 {
                     var parentRenderer = rendererList[parentIndex];
-                    parentRenderer.Volumes.Add(new VolumeRendererProxy( currentIndex));
+                    parentRenderer.Volumes.Add(new VolumeRendererProxy(currentIndex));
                 }
 
                 for (int i = 0; i < current.ChildVolumes.Count; ++i)
@@ -302,18 +338,31 @@ namespace Unity.AutoLOD
             m_Bounds = boundsList;
             m_Renderers = rendererList;
 
-            if ( m_Bounds.Count > 0)
+            if (m_Bounds.Count > 0)
                 m_ActiveVolumes.AddLast(0);
         }
 
         private FrustumCullHelper cullHelper = new FrustumCullHelper();
+
+        private GameObject m_LastGameObject;
+
         private void OnPreCull(Camera cam)
         {
+            if (cam == Camera.main)
+            {
+                UpdateLOD(cam);
+            }
+
+        }
+
+        public void UpdateLOD(Camera cam)
+        {
+
             var cameraTransform = cam.transform;
             var cameraPosition = cameraTransform.position;
 
             cullHelper.Set(cam);
-            
+
             float preRelative = 0.0f;
             if (cam.orthographic)
             {
@@ -327,10 +376,11 @@ namespace Unity.AutoLOD
 
             preRelative = preRelative * QualitySettings.lodBias;
 
+
             //Items are added or removed in the loop.
             //That's OK because be edited item is always after current index.
             //DO NOT CHANGE this loop to foreach.
-            for(var node = m_ActiveVolumes.First; node != null; node=node.Next)
+            for (var node = m_ActiveVolumes.First; node != null; node = node.Next)
             {
                 int index = node.Value;
                 var bounds = m_Bounds[index];
@@ -342,7 +392,7 @@ namespace Unity.AutoLOD
                 }
 
                 float distance = 1.0f;
-                if ( cam.orthographic == false)
+                if (cam.orthographic == false)
                     distance = Vector3.Distance(bounds.Center, cameraPosition);
 
                 float relativeHeight = bounds.Size * preRelative / distance;
@@ -360,9 +410,8 @@ namespace Unity.AutoLOD
                 {
                     renderer.Volumes[vi].SetEnable(renderDetail);
                 }
-
             }
-        }        
+        }
     }
 
 }
