@@ -54,7 +54,6 @@ namespace Unity.AutoLOD
         private System.Type[] batcherTypes;
         private string[] batcherDisplayNames;
 
-        private SerializedObject serializedObject;
         private LODSlider slider;
 
         private Vector2 windowScrollPos = Vector2.zero;
@@ -65,44 +64,25 @@ namespace Unity.AutoLOD
 
         void OnEnable()
         {
-            Initialize();
+            slider = new LODSlider();
+            slider.InsertRange("Detail", Config.LODRange);
+            slider.InsertRange("HLOD", 0.0f);
 
         }
 
         void OnDisable()
         {
             slider = null;
-            serializedObject = null;
         }
-
-        void Initialize()
-        {
-            var options = SceneLODCreator.instance.GetOptions();
-            options.LoadFromEditorPrefs();
-
-            serializedObject = new SerializedObject(options);
-
-            slider = new LODSlider();
-            slider.InsertRange("Detail", serializedObject.FindProperty("LODRange"));
-            slider.InsertRange("HLOD", null);
-        }
-
   
         private void OnFocus()
         {
             batcherTypes = ObjectUtils.GetImplementationsOfInterface(typeof(IBatcher)).ToArray();
             batcherDisplayNames = batcherTypes.Select(t => t.Name).ToArray();
-
-            SceneLODCreator.instance.GetOptions().LoadFromEditorPrefs();
         }
 
         void OnGUI()
         {
-            if ( serializedObject.targetObject == null)
-            { 
-                Initialize(); 
-            }
-            serializedObject.Update();
             windowScrollPos = EditorGUILayout.BeginScrollView(windowScrollPos);
             if (SceneLOD.instance.Updater != null)
             {
@@ -129,23 +109,17 @@ namespace Unity.AutoLOD
             DrawCommon();
             DrawGroups();            
 
-            if (serializedObject.ApplyModifiedProperties() || EditorGUI.EndChangeCheck())
-            {
-                SceneLODCreator.instance.GetOptions().SaveToEditorPrefs();
-            }
-
             GUI.enabled = true;
         }
 
         private bool m_CommonExpanded = true;
         void DrawCommon()
         {
-            var options = SceneLODCreator.instance.GetOptions();
             m_CommonExpanded = EditorGUILayout.Foldout(m_CommonExpanded, "Common");
             if (m_CommonExpanded)
             {
                 EditorGUI.indentLevel += 1;
-                options.VolumeSize = EditorGUILayout.FloatField(Styles.LODGroupSize, options.VolumeSize);
+                Config.VolumeSize = EditorGUILayout.FloatField(Styles.LODGroupSize, Config.VolumeSize);
                 DrawSlider();
                 EditorGUI.indentLevel -= 1;
             }
@@ -156,11 +130,10 @@ namespace Unity.AutoLOD
         private Dictionary<string, bool> m_GroupExpanded = new Dictionary<string, bool>();
         void DrawGroups()
         {
-            var options = SceneLODCreator.instance.GetOptions();
+            var allGroups = HLODGroup.FindAllGroups();
 
-            foreach (var pair in options.GroupOptions)
+            foreach (var groupName in allGroups.Keys)
             {
-                string groupName = pair.Key;
                 if ( m_GroupExpanded.ContainsKey( groupName ) == false )
                     m_GroupExpanded.Add(groupName, true);
 
@@ -169,9 +142,10 @@ namespace Unity.AutoLOD
                 {
                     EditorGUI.indentLevel += 1;
 
-                    DrawBatcher(pair.Value);
-                    DrawSimplification(pair.Value);
-                    DrawThreshold(pair.Value);
+                    var groupConfig = Config.GetGroupConfig(groupName);
+                    DrawBatcher(groupConfig);
+                    DrawSimplification(groupConfig);
+                    DrawThreshold(groupConfig);
 
                     EditorGUI.indentLevel -= 1;
                 }
@@ -184,19 +158,20 @@ namespace Unity.AutoLOD
         {
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.PrefixLabel(Styles.LODGroupSetting);
+            slider.SetRangeValue("Detail", Config.LODRange);
             slider.Draw();
+            Config.LODRange = slider.GetRangeValue("Detail");
             EditorGUILayout.EndHorizontal();            
             EditorGUILayout.Space();
 
         }
-        void DrawBatcher(SceneLODCreator.GroupOptions groupOptions)
+        void DrawBatcher(Config.GroupConfig groupOptions)
         {
             if (groupOptions.BatcherType == null)
             {
                 if (batcherTypes.Length > 0)
                 {
                     groupOptions.BatcherType = batcherTypes[0];
-                    groupOptions.Batcher = (IBatcher) Activator.CreateInstance(groupOptions.BatcherType, groupOptions.Name);
                     GUI.changed = true; //< for store value.
                 }
             }
@@ -207,7 +182,6 @@ namespace Unity.AutoLOD
                 if (batcherIndex != newIndex)
                 {
                     groupOptions.BatcherType = batcherTypes[newIndex];
-                    groupOptions.Batcher = (IBatcher) Activator.CreateInstance(groupOptions.BatcherType, groupOptions.Name);
                     //we don't need GUI.changed here. 
                     //Already set a value when popup index was changed.
                 }
@@ -226,7 +200,7 @@ namespace Unity.AutoLOD
             EditorGUILayout.Space();
         }
 
-        private void DrawSimplification(SceneLODCreator.GroupOptions groupOptions)
+        private void DrawSimplification(Config.GroupConfig groupOptions)
         {
             groupOptions.VolumeSimplification = EditorGUILayout.Toggle(Styles.VolumeSimplification, groupOptions.VolumeSimplification);
             if (groupOptions.VolumeSimplification)
@@ -241,7 +215,7 @@ namespace Unity.AutoLOD
             EditorGUILayout.Space();
         }
 
-        private void DrawTiangleRange(SceneLODCreator.GroupOptions groupOptions)
+        private void DrawTiangleRange(Config.GroupConfig groupOptions)
         {
             EditorGUILayout.PrefixLabel(Styles.LODTrangleRange);
             EditorGUI.indentLevel += 1;
@@ -251,7 +225,7 @@ namespace Unity.AutoLOD
 
             EditorGUI.indentLevel -= 1;
         }
-        private void DrawThreshold(SceneLODCreator.GroupOptions groupOptions)
+        private void DrawThreshold(Config.GroupConfig groupOptions)
         {
             groupOptions.LODThresholdSize = EditorGUILayout.FloatField("LOD Threshold size", groupOptions.LODThresholdSize);
         }

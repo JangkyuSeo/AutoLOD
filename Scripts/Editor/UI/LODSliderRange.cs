@@ -33,17 +33,11 @@ namespace Unity.AutoLOD
         }
 
         public string Name { set; get; }
-        public SerializedProperty Property { set; get; }
+        public float Value { set; get; }
 
         public float EndPosition
         {
-            get
-            {
-                if (Property == null)
-                    return 0.0f;
-
-                return Property.floatValue;
-            }
+            get { return Value; }
         }
 
         public Rect GetResizeArea(Rect sliderArea)

@@ -61,11 +61,9 @@ namespace Unity.AutoLOD
             }
         }
 
-        public void InsertRange(string name, SerializedProperty property)
+        public void InsertRange(string name, float value)
         {
-            float endPosition = 0.0f;
-            if (property != null)
-                endPosition = property.floatValue;
+            float endPosition = value;
 
             if (m_DefaultRange == null && m_RangeList.Count == 0)
             {
@@ -74,7 +72,7 @@ namespace Unity.AutoLOD
 
             var range = new LODSliderRange();
             range.Name = name;
-            range.Property = property;
+            range.Value = value;
 
             int insertPosition = 0;
 
@@ -89,16 +87,27 @@ namespace Unity.AutoLOD
             m_RangeList.Insert(insertPosition, range);
         }
 
-        //public float GetRangeValue(string name)
-        //{
-        //    for (int i = 0; i < m_RangeList.Count; ++i)
-        //    {
-        //        if (m_RangeList[i].Name == name)
-        //            return m_RangeList[i].EndPosition;
-        //    }
+        public void SetRangeValue(string name, float value)
+        {
+            for (int i = 0; i < m_RangeList.Count; ++i)
+            {
+                if (m_RangeList[i].Name == name)
+                {
+                    m_RangeList[i].Value = value;
+                    return;
+                }
+            }
+        }
+        public float GetRangeValue(string name)
+        {
+            for (int i = 0; i < m_RangeList.Count; ++i)
+            {
+                if (m_RangeList[i].Name == name)
+                    return m_RangeList[i].Value;
+            }
 
-        //    return 1.0f;
-        //}
+            return 1.0f;
+        }
 
         public int GetRangeCount()
         {
@@ -165,20 +174,20 @@ namespace Unity.AutoLOD
                 }
                 case EventType.MouseDrag:
                 {
-                    
+
                     if (GUIUtility.hotControl == sliderId && m_SelectedIndex >= 0)
                     {
                         evt.Use();
 
-                        var percentage = 1.0f - Mathf.Clamp((evt.mousePosition.x - sliderBarPosition.x) / sliderBarPosition.width, 0.01f, 1.0f);
+                        var percentage =
+                            1.0f - Mathf.Clamp((evt.mousePosition.x - sliderBarPosition.x) / sliderBarPosition.width,
+                                0.01f, 1.0f);
                         percentage = (percentage * percentage);
 
-                        if (m_RangeList[m_SelectedIndex].Property != null)
-                        {
-                            m_RangeList[m_SelectedIndex].Property.floatValue = percentage;
-                            GUI.changed = true;
-                        }
+                        m_RangeList[m_SelectedIndex].Value = percentage;
+                        GUI.changed = true;
                     }
+
                     break;
                 }
                 case EventType.MouseUp:

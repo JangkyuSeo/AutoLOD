@@ -264,13 +264,7 @@ namespace Unity.AutoLOD
     }
 
     class SimpleBatcherOption : IBatcherOption
-    {
-        const string k_SimpleBatcher = "AutoLOD.SimpleBatch.";
-        const string k_PackTextureSelect = ".PackTextureSelect";
-        const string k_LimitTextureSelect = ".LimitTextureSelect";
-        const string k_MaterialGUID = ".MaterialGUID";
-        
-        
+    {         
         class GUIStyles
         {
             public readonly string[] PackTextureSizeContents =
@@ -312,18 +306,13 @@ namespace Unity.AutoLOD
             }
         }
 
-        private string groupName;
-
-        private int packTextureSelect = 3;  //< default size is 1024
-        private int limitTextureSelect = 2; //< default size is 128
-
-        private Material batchMaterial;
+        private SimpleBatcherConfig.ConfigData data;
 
         public int PackTextureSize
         {
             get
             {
-                string str = Styles.PackTextureSizeContents[packTextureSelect];
+                string str = Styles.PackTextureSizeContents[data.PackTextureSelect];
                 return int.Parse(str);
             }
         }
@@ -332,80 +321,27 @@ namespace Unity.AutoLOD
         {
             get
             {
-                string str = Styles.LimitTextureSizeContents[limitTextureSelect];
+                string str = Styles.LimitTextureSizeContents[data.LimitTextureSelect];
                 return int.Parse(str);
             }
         }
 
         public Material BatchMaterial
         {
-            get { return batchMaterial; }
+            get { return data.BatchMaterial; }
         }
 
         public SimpleBatcherOption(string groupName)
         {
-            this.groupName = groupName;
-            
-            if (EditorPrefs.HasKey(GetKey(k_PackTextureSelect)))
-                packTextureSelect = EditorPrefs.GetInt(GetKey(k_PackTextureSelect), 3);
-            if (EditorPrefs.HasKey(GetKey(k_LimitTextureSelect)))
-                limitTextureSelect = EditorPrefs.GetInt(GetKey(k_LimitTextureSelect), 2);
-            if (EditorPrefs.HasKey(GetKey(k_MaterialGUID)))
-            {
-                do
-                {
-                    string guid = EditorPrefs.GetString(GetKey(k_MaterialGUID), null);
-                    if (string.IsNullOrEmpty(guid))
-                        break;
-
-                    string path  =AssetDatabase.GUIDToAssetPath(guid);
-                    if (string.IsNullOrEmpty(path))
-                        break;
-
-                    batchMaterial = AssetDatabase.LoadAssetAtPath<Material>(path);
-                } while (false);   
-            }
+            data = SimpleBatcherConfig.Get(groupName);
         }
         public void OnGUI()
         {
-            EditorGUI.BeginChangeCheck();
-            packTextureSelect = EditorGUILayout.Popup(Styles.PackTextureSize, packTextureSelect, Styles.PackTextureSizeContents);
-            if (EditorGUI.EndChangeCheck())
-            {
-                EditorPrefs.SetInt(GetKey(k_PackTextureSelect), packTextureSelect);
-            }
-
-            EditorGUI.BeginChangeCheck();
-            limitTextureSelect = EditorGUILayout.Popup(Styles.LimitTextureSize, limitTextureSelect, Styles.LimitTextureSizeContents);
-            if (EditorGUI.EndChangeCheck())
-            {
-                EditorPrefs.SetInt(GetKey(k_LimitTextureSelect), limitTextureSelect);
-            }
-
-            EditorGUI.BeginChangeCheck();
-            batchMaterial = EditorGUILayout.ObjectField("Material", batchMaterial, typeof(Material), false) as Material;
-            if (EditorGUI.EndChangeCheck())
-            {
-                string assetPath = null;
-                if ( batchMaterial != null)
-                    assetPath = AssetDatabase.GetAssetPath(batchMaterial);
-
-                if (string.IsNullOrEmpty(assetPath))
-                {
-                    EditorPrefs.DeleteKey(GetKey(k_MaterialGUID));
-                }
-                else
-                {
-                    string guid = AssetDatabase.AssetPathToGUID(assetPath);
-                    EditorPrefs.SetString(GetKey(k_MaterialGUID), guid);
-                }
-            }
+            data.PackTextureSelect = EditorGUILayout.Popup(Styles.PackTextureSize, data.PackTextureSelect, Styles.PackTextureSizeContents);
+            data.LimitTextureSelect = EditorGUILayout.Popup(Styles.LimitTextureSize, data.LimitTextureSelect, Styles.LimitTextureSizeContents);
+            data.BatchMaterial = EditorGUILayout.ObjectField("Material", data.BatchMaterial, typeof(Material), false) as Material;
         }
 
-        private string GetKey(string key)
-        {
-            return k_SimpleBatcher + groupName + key;
-        }
         
     }
 }
