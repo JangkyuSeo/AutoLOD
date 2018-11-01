@@ -14,92 +14,6 @@ namespace Unity.AutoLOD
 {
     public class SceneLODCreator : ScriptableSingleton<SceneLODCreator>
     {
-        private const string k_OptionStr = "AutoLOD.Options.";
-
-        public class Options : ScriptableObject
-        {
-            public float VolumeSize = 30.0f;
-            public float LODRange = 0.3f;
-
-            public Dictionary<string, GroupOptions> GroupOptions = new Dictionary<string, GroupOptions>();
-
-            public void SaveToEditorPrefs()
-            {
-                EditorPrefs.SetFloat(k_OptionStr + "VolumeSize", VolumeSize);
-                EditorPrefs.SetFloat(k_OptionStr + "LODRange", LODRange);
-
-                foreach (var group in GroupOptions.Values)
-                {
-                    group.SaveToEditorPrefs();
-                }
-            }
-
-            public void LoadFromEditorPrefs()
-            {
-                VolumeSize = EditorPrefs.GetFloat(k_OptionStr + "VolumeSize", 30.0f);
-                LODRange = EditorPrefs.GetFloat(k_OptionStr + "LODRange", 0.3f);
-
-                GroupOptions.Clear();
-                var groupNames = HLODGroup.FindAllGroups().Keys.ToList();
-                foreach (var name in groupNames)
-                {
-                    GroupOptions group = new GroupOptions(name);
-                    group.LoadFromEditorPrefs();
-                    GroupOptions.Add(name, group);
-                }
-            }
-        }
-
-
-        public class GroupOptions
-        {
-            public bool VolumeSimplification = true;
-            public float VolumePolygonRatio = 0.5f;
-
-            public Type BatcherType;
-            public IBatcher Batcher;
-
-            public float LODThresholdSize = 5.0f;
-
-            public int LODTriangleMin = 10;
-            public int LODTriangleMax = 500;
-
-            public string Name { private set; get; }
-
-            public GroupOptions(string name)
-            {
-                Name = name;
-            }
-
-            public void SaveToEditorPrefs()
-            {
-                EditorPrefs.SetBool(k_OptionStr + Name + ".VolumeSimplification", VolumeSimplification);
-                EditorPrefs.SetFloat(k_OptionStr + Name + ".VolumePolygonRatio", VolumePolygonRatio);
-                if ( BatcherType != null)
-                    EditorPrefs.SetString(k_OptionStr + Name + ".BatcherType", BatcherType.AssemblyQualifiedName);
-
-                EditorPrefs.SetFloat(k_OptionStr + Name + "LODThresholdSize", LODThresholdSize);
-
-                EditorPrefs.SetInt(k_OptionStr + Name + "LODTriangleMin", LODTriangleMin);
-                EditorPrefs.SetInt(k_OptionStr + Name + "LODTriangleMax", LODTriangleMax);
-                
-            }
-
-            public void LoadFromEditorPrefs()
-            {
-                VolumeSimplification = EditorPrefs.GetBool(k_OptionStr + Name + ".VolumeSimplification", true);
-                VolumePolygonRatio = EditorPrefs.GetFloat(k_OptionStr + Name + ".VolumePolygonRatio", 0.5f);
-                string batcherTypeStr = EditorPrefs.GetString(k_OptionStr + Name + ".BatcherType");
-                BatcherType = Type.GetType(batcherTypeStr);
-                Batcher = (IBatcher) Activator.CreateInstance(BatcherType, Name);
-
-                LODThresholdSize = EditorPrefs.GetFloat(k_OptionStr + Name + "LODThresholdSize", 5.0f);
-
-                LODTriangleMin = EditorPrefs.GetInt(k_OptionStr + Name + "LODTriangleMin", 10);
-                LODTriangleMax = EditorPrefs.GetInt(k_OptionStr + Name + "LODTriangleMax", 500);
-            }
-        }
-
         enum CoroutineOrder
         {
             BuildTree,          //< Make octree created with LODVolume.
@@ -120,18 +34,6 @@ namespace Unity.AutoLOD
         private int currentProgress = 0;
         private int maxProgress = 0;
         
-
-        private Options m_Options;
-
-        public Options GetOptions()
-        {
-            if ( m_Options == null )
-                m_Options = Options.CreateInstance<Options>();
-
-            return m_Options;
-        }
-
-
         static List<LODGroup> RemoveHLODLayer(List<LODGroup> groups)
         {
             int hlodLayerMask = LayerMask.NameToLayer(LODVolume.HLODLayer);
@@ -240,7 +142,7 @@ namespace Unity.AutoLOD
             StartCustomCoroutine(UpdateLODGroup(volume), CoroutineOrder.UpdateLOD);
 
             //Make a child if necessary.
-            if (boundsSize < m_Options.VolumeSize)
+            if (boundsSize < Config.VolumeSize)
                 yield break;
 
             //Volume doesn't have any group for a split.
@@ -327,7 +229,7 @@ namespace Unity.AutoLOD
             LOD lod = new LOD();
             LOD detailLOD = new LOD();
 
-            detailLOD.screenRelativeTransitionHeight = m_Options.LODRange;
+            detailLOD.screenRelativeTransitionHeight = Config.LODRange;
             lod.screenRelativeTransitionHeight = 0.0f;
 
             var lodGroup = volume.GetComponent<LODGroup>();
@@ -350,7 +252,7 @@ namespace Unity.AutoLOD
             List<Renderer> hlodRenderers = new List<Renderer>();
             int depth = GetDepth(volumeBounds);
 
-            var groupOptions = m_Options.GroupOptions[volumeGroup.GroupName];
+            var groupOptions = Config.GetGroupConfig(volumeGroup.GroupName);
 
             foreach (var group in lodGroups)
             {
@@ -425,7 +327,7 @@ namespace Unity.AutoLOD
             int index = 0;
             foreach (var pair in m_GroupHLODRootContainer)
             {
-                var groupOptions = m_Options.GroupOptions[pair.Key];
+                var groupOptions = Config.GetGroupConfig(pair.Key);
                 if (groupOptions.Batcher == null)
                     yield break;
 
@@ -637,7 +539,7 @@ namespace Unity.AutoLOD
 
         IEnumerator GetLODMesh(string groupName, Renderer renderer, int depth, Action<Mesh> returnCallback)
         {
-            var groupOptions = m_Options.GroupOptions[groupName];
+            var groupOptions = Config.GetGroupConfig(groupName);
             var mf = renderer.GetComponent<MeshFilter>();
             if (mf == null || mf.sharedMesh == null)
             {
@@ -704,7 +606,7 @@ namespace Unity.AutoLOD
             float size = Mathf.Max(bounds.extents.x, Mathf.Max(bounds.extents.y, bounds.extents.z));
             int depth = 0;
 
-            while (size > m_Options.VolumeSize)
+            while (size > Config.VolumeSize)
             {
                 depth += 1;
                 size /= 2.0f;
